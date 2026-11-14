@@ -1,0 +1,430 @@
+{
+  "schema": "upgrade-tree/1",
+  "meta": {
+    "name": "Stranded God",
+    "concept": "지구에 불시착한 귀여운 외계인이 원시시대 인류를 발전시켜 항성간 이동 기술을 완성하고 집으로 돌아가는 코믹 인크리멘탈. Steam 데스크탑, Unity. 프레스티지 없음. 돈스타브식 월드 화면에서 바닥의 나무·돌을 클릭해 줍는 것으로 시작하고, 진행할수록 활동 반경과 카메라 줌아웃이 커진다. 건물은 숨겨진 격자에 직사각형으로 배치."
+  },
+  "resources": [
+    {
+      "id": "food",
+      "name": "식량",
+      "manual": true,
+      "note": "채집으로 시작"
+    },
+    {
+      "id": "wood",
+      "name": "나무",
+      "manual": true,
+      "note": "바닥에서 클릭해 줍기 (유한)"
+    },
+    {
+      "id": "stone",
+      "name": "돌",
+      "manual": true,
+      "note": "바닥에서 클릭해 줍기 (유한)"
+    },
+    {
+      "id": "population",
+      "name": "인구",
+      "manual": false,
+      "note": ""
+    }
+  ],
+  "eras": [
+    {
+      "id": "primitive",
+      "name": "원시",
+      "color": "#f2a541"
+    },
+    {
+      "id": "ancient",
+      "name": "고대",
+      "color": "#6cb4ff"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "fire",
+      "name": "불",
+      "era": "primitive",
+      "status": "done",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "wood",
+          "base": 1,
+          "growth": 1
+        },
+        {
+          "resource": "stone",
+          "base": 1,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "unlock",
+          "target": "campfire",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "불을 피운다. 모닥불 건설이 해금된다.",
+      "designNote": "첫 테크. 식량 없이 나무1·돌1만으로.",
+      "tags": []
+    },
+    {
+      "id": "cooking",
+      "name": "요리",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "food",
+          "base": 10,
+          "growth": 1
+        },
+        {
+          "resource": "wood",
+          "base": 5,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "fire",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "multiply",
+          "target": "food.value",
+          "value": 1.5,
+          "perLevel": false
+        }
+      ],
+      "description": "식량 가치 ×{value1}",
+      "designNote": "불 다음 바로 보이는 보상.",
+      "tags": []
+    },
+    {
+      "id": "stone_tools",
+      "name": "뗀석기",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 5,
+      "cost": [
+        {
+          "resource": "stone",
+          "base": 8,
+          "growth": 1.4
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "fire",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "multiply",
+          "target": "gather.speed",
+          "value": 1.25,
+          "perLevel": true
+        }
+      ],
+      "description": "레벨당 채집 속도 ×{value1}",
+      "designNote": "클릭 피로를 덜어주는 첫 반복 업그레이드.",
+      "tags": []
+    },
+    {
+      "id": "alien_scout",
+      "name": "외계인 탐사",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 3,
+      "cost": [
+        {
+          "resource": "food",
+          "base": 15,
+          "growth": 1.8
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "fire",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "explore.radius",
+          "value": 1,
+          "perLevel": true
+        }
+      ],
+      "description": "활동 반경 +{value1} (레벨당)",
+      "designNote": "원시 한정. 외계인이 직접 탐사해 반경 확장.",
+      "tags": []
+    },
+    {
+      "id": "gathering_basket",
+      "name": "채집 바구니",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 3,
+      "cost": [
+        {
+          "resource": "wood",
+          "base": 12,
+          "growth": 1.5
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "stone_tools",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "gather.amount",
+          "value": 1,
+          "perLevel": true
+        }
+      ],
+      "description": "클릭당 채집량 +{value1}",
+      "designNote": "",
+      "tags": []
+    },
+    {
+      "id": "shelter",
+      "name": "동굴 정비",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "wood",
+          "base": 20,
+          "growth": 1
+        },
+        {
+          "resource": "stone",
+          "base": 20,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "fire",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "unlock",
+          "target": "building_grid",
+          "value": 1,
+          "perLevel": false
+        },
+        {
+          "type": "produce",
+          "target": "population",
+          "value": 0.02,
+          "perLevel": false
+        }
+      ],
+      "description": "건물 격자(3x3) 해금, 인구 +{value2}/초",
+      "designNote": "동굴은 최초 3x3.",
+      "tags": []
+    },
+    {
+      "id": "hunting",
+      "name": "사냥",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 3,
+      "cost": [
+        {
+          "resource": "stone",
+          "base": 15,
+          "growth": 1.6
+        },
+        {
+          "resource": "food",
+          "base": 10,
+          "growth": 1.6
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "stone_tools",
+            "minLevel": 2
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "produce",
+          "target": "food",
+          "value": 0.2,
+          "perLevel": true
+        }
+      ],
+      "description": "식량 자동 생산 +{value1}/초 (레벨당)",
+      "designNote": "첫 자동 생산.",
+      "tags": []
+    },
+    {
+      "id": "language",
+      "name": "언어",
+      "era": "primitive",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "food",
+          "base": 60,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "shelter",
+            "minLevel": 1
+          }
+        ],
+        "any": [
+          {
+            "resource": "population",
+            "reached": 10
+          }
+        ]
+      },
+      "effects": [
+        {
+          "type": "multiply",
+          "target": "research.speed",
+          "value": 1.2,
+          "perLevel": false
+        }
+      ],
+      "description": "연구 속도 ×{value1}",
+      "designNote": "인구 10 도달 조건 — 자원 마일스톤 예시.",
+      "tags": []
+    },
+    {
+      "id": "agriculture",
+      "name": "농경",
+      "era": "ancient",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "food",
+          "base": 150,
+          "growth": 1
+        },
+        {
+          "resource": "wood",
+          "base": 80,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "hunting",
+            "minLevel": 1
+          },
+          {
+            "node": "language",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "produce",
+          "target": "food",
+          "value": 2,
+          "perLevel": false
+        }
+      ],
+      "description": "식량 생산 +{value1}/초. 고대 시작.",
+      "designNote": "원시→고대 전환점.",
+      "tags": []
+    },
+    {
+      "id": "pottery",
+      "name": "토기",
+      "era": "ancient",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "stone",
+          "base": 100,
+          "growth": 1
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "agriculture",
+            "minLevel": 1
+          }
+        ],
+        "any": [
+          {
+            "node": "cooking",
+            "minLevel": 1
+          },
+          {
+            "custom": "점토 지형 발견"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "type": "multiply",
+          "target": "food.storage",
+          "value": 2,
+          "perLevel": false
+        }
+      ],
+      "description": "식량 저장량 ×{value1}",
+      "designNote": "OR 조건 예시: 요리 또는 점토 발견.",
+      "tags": []
+    }
+  ]
+}

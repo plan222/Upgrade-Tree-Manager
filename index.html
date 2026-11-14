@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업그레이드 트리 에디터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14161b; --panel:#1b1e25; --panel2:#22262f; --line:#2f3440; --line2:#3b4150;
+  --tx:#e7e9ee; --tx2:#a3a9b7; --tx3:#6f7685;
+  --acc:#f2a541; --acc2:#ffcf87; --err:#ff6b6b; --warn:#ffc857; --info:#6cb4ff; --ok:#5fd39a;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:13px/1.45 'Noto Sans KR',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:#1a1200;border-color:var(--acc);font-weight:700}
+button.ghost{background:transparent;border-color:transparent;color:var(--tx2)}
+button.ghost:hover{color:var(--tx);border-color:var(--line2)}
+button.danger:hover{border-color:var(--err);color:var(--err)}
+button:disabled{opacity:.4;cursor:default}
+input,select,textarea{background:#11131a;border:1px solid var(--line);border-radius:5px;padding:5px 7px;width:100%;min-width:0}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
+input[type=checkbox]{width:auto}
+input[type=color]{padding:0;height:28px;width:36px}
+textarea{resize:vertical;min-height:54px}
+.mono{font-family:var(--mono);font-size:12px}
+#app{display:grid;grid-template-rows:48px 1fr;height:100vh}
+#top{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+#top .title{font-weight:700;margin-right:6px;white-space:nowrap}
+#top .title span{color:var(--acc)}
+#top .proj{color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+#top .sp{flex:1}
+#vbadge{display:flex;gap:6px;align-items:center}
+.pill{border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700}
+.pill.e{background:#4a1f24;color:var(--err)} .pill.w{background:#4a3c1a;color:var(--warn)} .pill.i{background:#1a3350;color:var(--info)} .pill.ok{background:#173a2a;color:var(--ok)}
+#main{display:grid;grid-template-columns:290px 1fr 380px;min-height:0}
+#left,#right{background:var(--panel);overflow:auto;min-height:0}
+#left{border-right:1px solid var(--line);display:flex;flex-direction:column}
+#right{border-left:1px solid var(--line)}
+.tabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.tabs button{flex:1;border:none;border-radius:0;background:transparent;padding:10px 0;color:var(--tx2);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--tx);border-bottom-color:var(--acc)}
+.pad{padding:12px}
+.row{display:flex;gap:6px;align-items:center}
+.row>*{flex:1}
+.row>.fx0{flex:0 0 auto}
+.lbl{font-size:11px;color:var(--tx3);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.lbl:first-child{margin-top:0}
+.nlist{list-style:none;margin:0;padding:0}
+.nlist li{padding:7px 12px;border-bottom:1px solid #20242c;cursor:pointer;display:flex;gap:8px;align-items:center}
+.nlist li:hover{background:#20242c}
+.nlist li.on{background:#2a2418}
+.nlist .dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+.nlist .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nlist .id{color:var(--tx3);font-family:var(--mono);font-size:11px}
+.nlist .flag{font-size:11px}
+.sec{border-bottom:1px solid var(--line);padding:12px 14px}
+.sec h3{margin:0 0 8px;font-size:12px;color:var(--acc2);display:flex;align-items:center;gap:8px}
+.sec h3 small{color:var(--tx3);font-weight:400}
+.sec h3 .sp{flex:1}
+.lst{display:flex;flex-direction:column;gap:6px}
+.item{display:grid;gap:5px;align-items:center}
+.x{background:transparent;border:none;color:var(--tx3);padding:2px 6px;font-size:15px}
+.x:hover{color:var(--err)}
+.add{width:100%;margin-top:6px;border-style:dashed;color:var(--tx2);background:transparent}
+.muted{color:var(--tx3)}
+.hint{color:var(--tx3);font-size:11.5px;margin-top:4px}
+.prev{background:#11131a;border:1px dashed var(--line2);border-radius:6px;padding:7px 9px;margin-top:6px;color:var(--acc2)}
+table.cost{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;margin-top:6px}
+table.cost td,table.cost th{padding:2px 6px;border-bottom:1px solid #262a33;text-align:right}
+table.cost th{color:var(--tx3);font-weight:400}
+table.cost td:first-child,table.cost th:first-child{text-align:left}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:2px 9px;font-size:12px;cursor:pointer}
+.chip:hover{border-color:var(--acc)}
+#graph{position:relative;overflow:hidden;background:
+  radial-gradient(circle at 1px 1px,#262a33 1px,transparent 0) 0 0/22px 22px, var(--bg)}
+#graph svg{width:100%;height:100%;display:block;cursor:grab;user-select:none}
+#graph svg.pan{cursor:grabbing}
+#gtools{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}
+#legend{position:absolute;left:12px;bottom:12px;display:flex;gap:10px;flex-wrap:wrap;background:#1b1e25dd;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11.5px;color:var(--tx2);max-width:70%}
+#legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.gnode rect.b{fill:#1f232c;stroke:#3a4050;stroke-width:1.2}
+.gnode:hover rect.b{stroke:var(--acc)}
+.gnode.sel rect.b{stroke:var(--acc);stroke-width:2.4;fill:#2a2418}
+.gnode.err rect.b{stroke:var(--err)}
+.gnode.idea rect.b{stroke-dasharray:5 3}
+.gnode.cut{opacity:.35}
+.gnode.dim{opacity:.18}
+.gnode text{fill:var(--tx);font-size:13px}
+.gnode text.s{fill:var(--tx3);font-size:10.5px;font-family:var(--mono)}
+.gnode text.c{fill:var(--tx2);font-size:11px}
+.edge{fill:none;stroke:#566076;stroke-width:1.5}
+.edge.any{stroke:#8c6fd6;stroke-dasharray:5 4}
+.edge.hl{stroke:var(--acc);stroke-width:2.2}
+.edge.any.hl{stroke:#b89cff}
+.edge.dim{opacity:.1}
+.colhdr{fill:var(--tx3);font-size:11px;font-family:var(--mono)}
+.empty{padding:40px 20px;text-align:center;color:var(--tx3)}
+/* modal */
+#modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
+#modal.on{display:flex}
+#modal .box{background:var(--panel);border:1px solid var(--line2);border-radius:12px;width:min(860px,94vw);max-height:90vh;display:flex;flex-direction:column}
+#modal .hd{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center}
+#modal .hd .sp{flex:1}
+#modal .bd{padding:14px 18px;overflow:auto}
+#modal .ft{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+#modal textarea.big{min-height:340px;font-family:var(--mono);font-size:12px}
+.vitem{padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.vitem:hover{background:var(--panel2)}
+.diff{font-family:var(--mono);font-size:12px}
+.diff .a{color:var(--ok)} .diff .r{color:var(--err)} .diff .c{color:var(--warn)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2b303b;border:1px solid var(--line2);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
+#toast.on{opacity:1}
+.confirm{color:var(--err);border-color:var(--err)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <div class="title">⬡ <span>Upgrade</span> Tree</div>
+    <div class="proj" id="projName"></div>
+    <button class="ghost" id="undoBtn" title="실행 취소 (Ctrl+Z)">↶</button>
+    <button class="ghost" id="redoBtn" title="다시 실행 (Ctrl+Shift+Z)">↷</button>
+    <div class="sp"></div>
+    <div id="vbadge" title="검증 결과 보기" style="cursor:pointer"></div>
+    <button id="importBtn">불러오기</button>
+    <button id="exportBtn">JSON 내보내기</button>
+    <button class="pri" id="aiBtn">AI에게 넘기기</button>
+  </div>
+  <div id="main">
+    <aside id="left">
+      <div class="tabs" id="tabs">
+        <button data-tab="nodes" class="on">노드</button>
+        <button data-tab="res">재화</button>
+        <button data-tab="eras">시대</button>
+        <button data-tab="proj">프로젝트</button>
+      </div>
+      <div id="leftBody" style="flex:1"></div>
+    </aside>
+    <section id="graph">
+      <svg id="svg"><defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#566076"/></marker>
+        <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c6fd6"/></marker>
+        <marker id="arH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2a541"/></marker>
+      </defs><g id="vp"></g></svg>
+      <div id="legend"></div>
+      <div id="gtools">
+        <button id="zoomOut">−</button><button id="zoomIn">+</button><button id="fitBtn">전체 보기</button>
+      </div>
+    </section>
+    <aside id="right"></aside>
+  </div>
+</div>
+<div id="modal"><div class="box"><div class="hd"><span id="mTitle"></span><div class="sp"></div><button class="ghost" id="mClose">✕</button></div><div class="bd" id="mBody"></div><div class="ft" id="mFoot"></div></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ================= 데이터 ================= */
+const SCHEMA = 'upgrade-tree/1';
+const STATUS = {idea:'아이디어', wip:'작업 중', done:'구현됨', cut:'폐기'};
+const EFFECT_TYPES = {
+  produce:'생산 (+초당)', multiply:'배율 (×)', add:'가산 (+)', unlock:'기능 해금', custom:'기타'
+};
+const STORE_KEY = 'upgradeTreeEditor.project.v1';
+
+function sample(){
+  return {
+    schema: SCHEMA,
+    meta: {
+      name: 'Stranded God',
+      concept: '지구에 불시착한 귀여운 외계인이 원시시대 인류를 발전시켜 항성간 이동 기술을 완성하고 집으로 돌아가는 코믹 인크리멘탈. Steam 데스크탑, Unity. 프레스티지 없음. 돈스타브식 월드 화면에서 바닥의 나무·돌을 클릭해 줍는 것으로 시작하고, 진행할수록 활동 반경과 카메라 줌아웃이 커진다. 건물은 숨겨진 격자에 직사각형으로 배치.'
+    },
+    resources: [
+      {id:'food', name:'식량', manual:true, note:'채집으로 시작'},
+      {id:'wood', name:'나무', manual:true, note:'바닥에서 클릭해 줍기 (유한)'},
+      {id:'stone', name:'돌', manual:true, note:'바닥에서 클릭해 줍기 (유한)'},
+      {id:'population', name:'인구', manual:false, note:''}
+    ],
+    eras: [
+      {id:'primitive', name:'원시', color:'#f2a541'},
+      {id:'ancient', name:'고대', color:'#6cb4ff'}
+    ],
+    nodes: [
+      N('fire','불','primitive',1,[['wood',1,1],['stone',1,1]],[],[],[{type:'unlock',target:'campfire',value:1,perLevel:false}],
+        '불을 피운다. 모닥불 건설이 해금된다.','첫 테크. 식량 없이 나무1·돌1만으로.','done'),
+      N('cooking','요리','primitive',1,[['food',10,1],['wood',5,1]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'food.value',value:1.5,perLevel:false}],
+        '식량 가치 ×{value1}','불 다음 바로 보이는 보상.','idea'),
+      N('stone_tools','뗀석기','primitive',5,[['stone',8,1.4]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'gather.speed',value:1.25,perLevel:true}],
+        '레벨당 채집 속도 ×{value1}','클릭 피로를 덜어주는 첫 반복 업그레이드.','idea'),
+      N('alien_scout','외계인 탐사','primitive',3,[['food',15,1.8]],[{node:'fire',minLevel:1}],[],[{type:'add',target:'explore.radius',value:1,perLevel:true}],
+        '활동 반경 +{value1} (레벨당)','원시 한정. 외계인이 직접 탐사해 반경 확장.','idea'),
+      N('gathering_basket','채집 바구니','primitive',3,[['wood',12,1.5]],[{node:'stone_tools',minLevel:1}],[],[{type:'add',target:'gather.amount',value:1,perLevel:true}],
+        '클릭당 채집량 +{value1}','','idea'),
+      N('shelter','동굴 정비','primitive',1,[['wood',20,1],['stone',20,1]],[{node:'fire',minLevel:1}],[],[{type:'unlock',target:'building_grid',value:1,perLevel:false},{type:'produce',target:'population',value:0.02,perLevel:false}],
+        '건물 격자(3x3) 해금, 인구 +{value2}/초','동굴은 최초 3x3.','idea'),
+      N('hunting','사냥','primitive',3,[['stone',15,1.6],['food',10,1.6]],[{node:'stone_tools',minLevel:2}],[],[{type:'produce',target:'food',value:0.2,perLevel:true}],
+        '식량 자동 생산 +{value1}/초 (레벨당)','첫 자동 생산.','idea'),
+      N('language','언어','primitive',1,[['food',60,1]],[{node:'shelter',minLevel:1}],[{resource:'population',reached:10}],[{type:'multiply',target:'research.speed',value:1.2,perLevel:false}],
+        '연구 속도 ×{value1}','인구 10 도달 조건 — 자원 마일스톤 예시.','idea'),
+      N('agriculture','농경','ancient',1,[['food',150,1],['wood',80,1]],[{node:'hunting',minLevel:1},{node:'language',minLevel:1}],[],[{type:'produce',target:'food',value:2,perLevel:false}],
+        '식량 생산 +{value1}/초. 고대 시작.','원시→고대 전환점.','idea'),
+      N('pottery','토기','ancient',1,[['stone',100,1]],[{node:'agriculture',minLevel:1}],[{node:'cooking',minLevel:1},{custom:'점토 지형 발견'}],[{type:'multiply',target:'food.storage',value:2,perLevel:false}],
+        '식량 저장량 ×{value1}','OR 조건 예시: 요리 또는 점토 발견.','idea')
+    ]
+  };
+  function N(id,name,era,maxLevel,cost,all,any,effects,description,designNote,status){
+    return {id,name,era,status,maxLevel,
+      cost:cost.map(([resource,base,growth])=>({resource,base,growth})),
+      requires:{all,any},effects,description,designNote,tags:[]};
+  }
+}
+function blankProject(){
+  return {schema:SCHEMA,meta:{name:'새 프로젝트',concept:''},resources:[{id:'gold',name:'골드',manual:true,note:''}],eras:[{id:'era1',name:'1단계',color:'#f2a541'}],nodes:[]};
+}
+function normalize(p){
+  p = p && typeof p==='object' ? p : {};
+  const out = {schema:SCHEMA, meta:Object.assign({name:'이름 없음',concept:''}, p.meta||{}),
+    resources:[], eras:[], nodes:[]};
+  for(const r of (p.resources||[])) out.resources.push({id:String(r.id??''),name:String(r.name??r.id??''),manual:!!r.manual,note:String(r.note??'')});
+  for(const e of (p.eras||[])) out.eras.push({id:String(e.id??''),name:String(e.name??e.id??''),color:e.color||'#888888'});
+  for(const n of (p.nodes||[])){
+    const req = n.requires||{};
+    out.nodes.push({
+      id:String(n.id??''), name:String(n.name??n.id??''), era:String(n.era??''), status:STATUS[n.status]?n.status:'idea',
+      maxLevel: Number.isFinite(+n.maxLevel)&&+n.maxLevel>0 ? +n.maxLevel : 1,
+      cost:(n.cost||[]).map(c=>({resource:String(c.resource??''),base:num(c.base),growth:c.growth==null?1:num(c.growth)})),
+      requires:{all:(req.all||[]).map(normCond),any:(req.any||[]).map(normCond)},
+      effects:(n.effects||[]).map(e=>({type:EFFECT_TYPES[e.type]?e.type:'custom',target:String(e.target??''),value:e.value??0,perLevel:!!e.perLevel})),
+      description:String(n.description??''), designNote:String(n.designNote??''), tags:Array.isArray(n.tags)?n.tags.map(String):[]
+    });
+  }
+  return out;
+}
+function normCond(c){
+  if(c==null) return {custom:''};
+  if(typeof c==='string') return {node:c,minLevel:1};
+  if('node' in c) return {node:String(c.node),minLevel:c.minLevel==null?1:num(c.minLevel)};
+  if('resource' in c) return {resource:String(c.resource),reached:num(c.reached)};
+  return {custom:String(c.custom??'')};
+}
+function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
+function condType(c){return 'node' in c?'node':'resource' in c?'resource':'custom'}
+
+/* ================= 상태 / 저장 / 실행취소 ================= */
+let P, sel=null, tab='nodes', filter='', eraFilter='', view={x:0,y:0,k:1}, fitted=false;
+let hist=[], hpos=-1, commitTimer=null;
+function load(){
+  try{ const s=localStorage.getItem(STORE_KEY); if(s){ P=normalize(JSON.parse(s)); return; } }catch(e){}
+  P=sample();
+}
+function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(P)); }catch(e){} }
+function snapshot(){
+  const s=JSON.stringify(P);
+  if(hist[hpos]===s) return;
+  hist=hist.slice(0,hpos+1); hist.push(s); if(hist.length>200) hist.shift(); hpos=hist.length-1; updUndo();
+}
+function changed(immediate){ // 데이터가 바뀔 때마다 호출
+  persist(); scheduleRender();
+  clearTimeout(commitTimer);
+  if(immediate) snapshot(); else commitTimer=setTimeout(snapshot,500);
+}
+function undo(){ if(hpos>0){ hpos--; P=normalize(JSON.parse(hist[hpos])); afterRestore(); } }
+function redo(){ if(hpos<hist.length-1){ hpos++; P=normalize(JSON.parse(hist[hpos])); afterRestore(); } }
+function afterRestore(){ if(sel&&!node(sel)) sel=null; persist(); renderAll(); updUndo(); }
+function updUndo(){ $('#undoBtn').disabled=hpos<=0; $('#redoBtn').disabled=hpos>=hist.length-1; }
+
+/* ================= 유틸 ================= */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const node=id=>P.nodes.find(n=>n.id===id);
+const res=id=>P.resources.find(r=>r.id===id);
+const era=id=>P.eras.find(e=>e.id===id);
+const eraIdx=id=>{const i=P.eras.findIndex(e=>e.id===id);return i<0?999:i};
+const eraColor=id=>(era(id)||{}).color||'#666';
+const resName=id=>(res(id)||{}).name||id;
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1800)}
+function fmt(n){ if(!Number.isFinite(n)) return String(n); const a=Math.abs(n);
+  if(a>=1e15) return n.toExponential(2);
+  if(a>=1e12) return (n/1e12).toFixed(2).replace(/\.?0+$/,'')+'T';
+  if(a>=1e9) return (n/1e9).toFixed(2).replace(/\.?0+$/,'')+'B';
+  if(a>=1e6) return (n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M';
+  if(a>=1e4) return (n/1e3).toFixed(1).replace(/\.?0+$/,'')+'K';
+  return Math.round(n*100)/100+''; }
+function costAt(c,lvl){ return Math.ceil(c.base*Math.pow(c.growth||1,lvl-1)); }
+function nodeDeps(n){ return [...n.requires.all,...n.requires.any].filter(c=>'node' in c).map(c=>c.node); }
+function uniqueId(base){ let id=base,i=2; const ids=new Set(P.nodes.map(n=>n.id)); while(ids.has(id)) id=base+'_'+(i++); return id; }
+function slug(s){ return String(s).trim().toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,''); }
+function describe(n){
+  let s=n.description||'';
+  s=s.replace(/\{value(\d*)\}/g,(m,d)=>{const e=n.effects[(d?+d:1)-1];return e?(typeof e.value==='number'?fmt(e.value):String(e.value)):m;});
+  return s.replace(/\{maxLevel\}/g,n.maxLevel);
+}
+
+/* ================= 검증 ================= */
+function validate(){
+  const out=[]; const add=(lv,msg,id)=>out.push({lv,msg,id});
+  const ids=new Map();
+  for(const n of P.nodes){ if(!n.id) add('e','ID가 비어 있는 노드가 있어요',null); ids.set(n.id,(ids.get(n.id)||0)+1); }
+  for(const [id,c] of ids) if(c>1) add('e',`노드 ID "${id}"가 ${c}번 중복돼요`,id);
+  const rids=new Set(P.resources.map(r=>r.id)); const eids=new Set(P.eras.map(e=>e.id));
+  const consumed=new Set(), produced=new Set();
+  for(const n of P.nodes){
+    if(n.era && !eids.has(n.era)) add('e',`없는 시대 "${n.era}"`,n.id);
+    if(!n.era) add('w','시대가 지정되지 않았어요',n.id);
+    for(const c of n.cost){
+      if(!rids.has(c.resource)) add('e',`비용에 없는 재화 "${c.resource}"`,n.id); else consumed.add(c.resource);
+      if(c.base<=0) add('w',`${resName(c.resource)} 기본 비용이 0 이하`,n.id);
+      if(n.maxLevel>1 && (c.growth||1)<1) add('w',`${resName(c.resource)} 증가율이 1보다 작아 레벨이 오를수록 싸져요`,n.id);
+    }
+    for(const c of [...n.requires.all,...n.requires.any]){
+      const t=condType(c);
+      if(t==='node'){
+        if(c.node===n.id) add('e','자기 자신을 요구해요',n.id);
+        else if(!ids.has(c.node)) add('e',`없는 노드 "${c.node}"를 요구해요`,n.id);
+        else { const d=node(c.node); if(c.minLevel>d.maxLevel) add('e',`"${d.name}" Lv${c.minLevel} 요구 — 최대 레벨은 ${d.maxLevel}`,n.id);
+               if(d.status==='cut' && n.status!=='cut') add('w',`폐기된 노드 "${d.name}"에 의존해요`,n.id); }
+      } else if(t==='resource'){ if(!rids.has(c.resource)) add('e',`조건에 없는 재화 "${c.resource}"`,n.id); }
+      else if(!c.custom.trim()) add('w','비어 있는 기타 조건',n.id);
+    }
+    for(const e of n.effects){
+      if(e.type==='produce'){ if(!rids.has(e.target)) add('e',`생산 효과의 대상 "${e.target}"이 재화가 아니에요`,n.id); else produced.add(e.target); }
+      if(!e.target && e.type!=='custom') add('w','효과 대상이 비어 있어요',n.id);
+    }
+    const refs=[...(n.description||'').matchAll(/\{value(\d*)\}/g)].map(m=>m[1]?+m[1]:1);
+    for(const r of refs) if(r>n.effects.length) add('w',`설명의 {value${r}}에 해당하는 효과가 없어요`,n.id);
+    if(!n.description.trim()) add('i','설명이 비어 있어요',n.id);
+    if(!n.cost.length && !n.requires.all.length && !n.requires.any.length) add('i','비용도 조건도 없어요 — 시작 노드인가요?',n.id);
+  }
+  // 순환 검사
+  const state=new Map(); const stack=[];
+  const visit=id=>{ state.set(id,1); stack.push(id); const n=node(id);
+    if(n) for(const d of nodeDeps(n)){ if(!ids.has(d)||d===id) continue;
+      if(state.get(d)===1){ const cyc=stack.slice(stack.indexOf(d)).concat(d); add('e','순환 의존: '+cyc.join(' → '),id); }
+      else if(!state.get(d)) visit(d); }
+    stack.pop(); state.set(id,2); };
+  for(const n of P.nodes) if(!state.get(n.id)) visit(n.id);
+  // 재화
+  const rc=new Map(); for(const r of P.resources) rc.set(r.id,(rc.get(r.id)||0)+1);
+  for(const [id,c] of rc) if(c>1) add('e',`재화 ID "${id}"가 중복돼요`,null);
+  for(const r of P.resources){
+    if(!r.manual && !produced.has(r.id)) add('w',`재화 "${r.name}"를 생산하는 노드가 없어요 (직접 수집이면 재화 탭에서 체크)`,null);
+    if(!consumed.has(r.id)) add('i',`재화 "${r.name}"를 비용으로 쓰는 노드가 없어요`,null);
+  }
+  return out;
+}
+
+/* ================= 레이아웃 ================= */
+const NW=200, NH=64, GX=90, GY=16, PADX=40, PADY=48;
+function layout(){
+  const map=new Map(P.nodes.map(n=>[n.id,n]));
+  const depth=new Map(), vis=new Set();
+  const dep=id=>{ if(depth.has(id)) return depth.get(id); if(vis.has(id)) return 0; vis.add(id);
+    const n=map.get(id); let d=0;
+    for(const p of nodeDeps(n)) if(map.has(p)&&p!==id) d=Math.max(d,dep(p)+1);
+    vis.delete(id); depth.set(id,d); return d; };
+  P.nodes.forEach(n=>dep(n.id));
+  const cols=[]; for(const n of P.nodes){ const d=depth.get(n.id); (cols[d]=cols[d]||[]).push(n); }
+  const rowOf=new Map(), pos=new Map();
+  cols.forEach((col,d)=>{ if(!col) return;
+    const bary=n=>{ const ps=nodeDeps(n).filter(p=>rowOf.has(p)); return ps.length? ps.reduce((a,p)=>a+rowOf.get(p),0)/ps.length : 1e6; };
+    col.sort((a,b)=> eraIdx(a.era)-eraIdx(b.era) || bary(a)-bary(b) || a.name.localeCompare(b.name,'ko'));
+    col.forEach((n,i)=>{ rowOf.set(n.id,i); pos.set(n.id,{x:PADX+d*(NW+GX), y:PADY+i*(NH+GY)}); });
+  });
+  return {pos,depth,cols:cols.length};
+}
+
+/* ================= 그래프 렌더 ================= */
+function related(id){
+  const up=new Set(), down=new Set();
+  const children=new Map(); for(const n of P.nodes) for(const d of nodeDeps(n)){ if(!children.has(d)) children.set(d,[]); children.get(d).push(n.id); }
+  const goUp=i=>{ const n=node(i); if(!n) return; for(const d of nodeDeps(n)) if(!up.has(d)){ up.add(d); goUp(d); } };
+  const goDn=i=>{ for(const c of children.get(i)||[]) if(!down.has(c)){ down.add(c); goDn(c); } };
+  goUp(id); goDn(id); return new Set([id,...up,...down]);
+}
+let lastLayout=null;
+function renderGraph(issues){
+  const L=layout(); lastLayout=L;
+  const errIds=new Set(issues.filter(i=>i.lv==='e'&&i.id).map(i=>i.id));
+  const rel = sel&&node(sel) ? related(sel) : null;
+  let s='';
+  for(let d=0; d<L.cols; d++) s+=`<text class="colhdr" x="${PADX+d*(NW+GX)}" y="${PADY-14}">단계 ${d}</text>`;
+  // edges
+  for(const n of P.nodes){ const b=L.pos.get(n.id); if(!b) continue;
+    for(const [kind,list] of [['all',n.requires.all],['any',n.requires.any]]) for(const c of list){
+      if(!('node' in c)) continue; const a=L.pos.get(c.node); if(!a||c.node===n.id) continue;
+      const x1=a.x+NW, y1=a.y+NH/2, x2=b.x-2, y2=b.y+NH/2, mx=(x1+x2)/2;
+      const back = x2<=x1;
+      const path = back ? `M${x1},${y1} C${x1+60},${y1} ${x2-60},${y2} ${x2},${y2}` : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+      const hl = rel && rel.has(n.id) && rel.has(c.node);
+      const cls=`edge ${kind==='any'?'any':''} ${rel?(hl?'hl':'dim'):''}`;
+      const mk = rel&&hl ? 'arH' : kind==='any'?'arA':'ar';
+      s+=`<path class="${cls}" d="${path}" marker-end="url(#${mk})"><title>${esc(node(c.node)?.name)} Lv${c.minLevel} → ${esc(n.name)}${kind==='any'?' (OR)':''}</title></path>`;
+      if(c.minLevel>1) s+=`<text class="colhdr" x="${(x1+x2)/2}" y="${(y1+y2)/2-4}" text-anchor="middle" ${rel&&!hl?'opacity=".1"':''}>Lv${c.minLevel}</text>`;
+    }
+  }
+  // nodes
+  for(const n of P.nodes){ const p=L.pos.get(n.id); if(!p) continue;
+    const cls=['gnode', n.id===sel?'sel':'', errIds.has(n.id)?'err':'', n.status, rel&&!rel.has(n.id)?'dim':''].join(' ');
+    const costTxt = n.cost.map(c=>`${resName(c.resource)} ${fmt(c.base)}`).join(' · ') || '무료';
+    const extra = [...n.requires.all,...n.requires.any].some(c=>!('node' in c)) ? ' · +조건' : '';
+    const lv = n.maxLevel>1?` ×${n.maxLevel}`:'';
+    const st = n.status==='done'?'✓ ':n.status==='wip'?'◐ ':'';
+    s+=`<g class="${cls}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">
+      <rect class="b" width="${NW}" height="${NH}" rx="8"/>
+      <rect width="5" height="${NH-12}" x="0" y="6" rx="2" fill="${esc(eraColor(n.era))}"/>
+      <text x="14" y="21">${esc(st+clip(n.name,14))}<tspan class="s" dx="6">${esc(lv)}</tspan></text>
+      <text class="s" x="14" y="36">${esc(clip(n.id,26))}</text>
+      <text class="c" x="14" y="53">${esc(clip(costTxt+extra,24))}</text>
+      <title>${esc(n.name)}\n${esc(describe(n))}</title>
+    </g>`;
+  }
+  $('#vp').innerHTML=s;
+  applyView();
+  $('#legend').innerHTML = P.eras.map(e=>`<span><i style="background:${esc(e.color)}"></i>${esc(e.name)}</span>`).join('')
+    + `<span>── AND</span><span style="color:#b89cff">┄┄ OR</span><span>점선 테두리 = 아이디어</span>`;
+  if(!fitted && P.nodes.length){ fitted=true; fit(); }
+}
+function clip(s,n){ s=String(s); let w=0,o=''; for(const ch of s){ w+= /[ㄱ-힝]/.test(ch)?1.7:1; if(w>n*1.15){ return o+'…'; } o+=ch; } return o; }
+function applyView(){ $('#vp').setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.k})`); }
+function fit(){
+  if(!lastLayout||!P.nodes.length) return;
+  let maxX=0,maxY=0; for(const p of lastLayout.pos.values()){ maxX=Math.max(maxX,p.x+NW); maxY=Math.max(maxY,p.y+NH); }
+  const r=$('#svg').getBoundingClientRect(); const w=maxX+PADX, h=maxY+PADY;
+  view.k=Math.min(1.2, Math.max(.2, Math.min(r.width/w, r.height/h)));
+  view.x=(r.width-w*view.k)/2; view.y=Math.max(0,(r.height-h*view.k)/2); applyView();
+}
+function centerOn(id){
+  const p=lastLayout?.pos.get(id); if(!p) return; const r=$('#svg').getBoundingClientRect();
+  view.x=r.width/2-(p.x+NW/2)*view.k; view.y=r.height/2-(p.y+NH/2)*view.k; applyView();
+}
+(function graphEvents(){
+  const svg=$('#svg'); let drag=null;
+  svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y,moved:false}; svg.classList.add('pan'); });
+  window.addEventListener('mousemove',e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true; view.x=drag.vx+dx; view.y=drag.vy+dy; applyView(); });
+  window.addEventListener('mouseup',e=>{ if(!drag) return; svg.classList.remove('pan');
+    if(!drag.moved){ const g=e.target.closest&&e.target.closest('.gnode'); select(g?g.dataset.id:null); }
+    drag=null; });
+  svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
+    const k2=Math.min(2.5,Math.max(.15,view.k*Math.exp(-e.deltaY*0.0015)));
+    view.x=mx-(mx-view.x)*k2/view.k; view.y=my-(my-view.y)*k2/view.k; view.k=k2; applyView(); },{passive:false});
+  const zoom=f=>{ const r=svg.getBoundingClientRect(); const mx=r.width/2,my=r.height/2; const k2=Math.min(2.5,Math.max(.15,view.k*f));
+    view.x=mx-(mx-view.x)*k2/view.k; view.y=my-(my-view.y)*k2/view.k; view.k=k2; applyView(); };
+  $('#zoomIn').onclick=()=>zoom(1.2); $('#zoomOut').onclick=()=>zoom(1/1.2); $('#fitBtn').onclick=fit;
+})();
+
+/* ================= 왼쪽 패널 ================= */
+function renderLeft(issues){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  const el=$('#leftBody');
+  if(tab==='nodes'){
+    const nodeIssue=new Map(); for(const i of issues) if(i.id){ const cur=nodeIssue.get(i.id); if(!cur||rank(i.lv)<rank(cur)) nodeIssue.set(i.id,i.lv); }
+    const f=filter.trim().toLowerCase();
+    const list=P.nodes.filter(n=>(!eraFilter||n.era===eraFilter) && (!f || n.name.toLowerCase().includes(f)||n.id.includes(f)||n.description.toLowerCase().includes(f)))
+      .slice().sort((a,b)=>eraIdx(a.era)-eraIdx(b.era)||(lastLayout?.depth.get(a.id)??0)-(lastLayout?.depth.get(b.id)??0));
+    const keepFocus = document.activeElement && document.activeElement.id==='q';
+    el.innerHTML=`<div class="pad" style="padding-bottom:8px">
+        <div class="row"><input id="q" placeholder="이름·ID·설명 검색" value="${esc(filter)}"><button class="pri fx0" id="addNode">+ 노드</button></div>
+        <div class="row" style="margin-top:6px"><select id="eraF"><option value="">모든 시대 (${P.nodes.length})</option>${P.eras.map(e=>`<option value="${esc(e.id)}" ${eraFilter===e.id?'selected':''}>${esc(e.name)} (${P.nodes.filter(n=>n.era===e.id).length})</option>`).join('')}</select></div>
+      </div>
+      <ul class="nlist">${list.map(n=>`<li data-id="${esc(n.id)}" class="${n.id===sel?'on':''}">
+        <span class="dot" style="background:${esc(eraColor(n.era))}"></span>
+        <span class="nm">${esc(n.name)} <span class="id">${esc(n.id)}</span></span>
+        ${nodeIssue.has(n.id)?`<span class="flag" style="color:${lvColor(nodeIssue.get(n.id))}">●</span>`:''}
+        <span class="muted" style="font-size:11px">${STATUS[n.status]}</span></li>`).join('') || '<div class="empty">노드가 없어요</div>'}</ul>`;
+    const q=$('#q'); q.oninput=()=>{ filter=q.value; renderLeft(validate()); };
+    if(keepFocus){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+    $('#eraF').onchange=e=>{ eraFilter=e.target.value; renderLeft(validate()); };
+    $('#addNode').onclick=addNode;
+    el.querySelectorAll('.nlist li').forEach(li=>li.onclick=()=>{ select(li.dataset.id); centerOn(li.dataset.id); });
+  }
+  if(tab==='res'){
+    el.innerHTML=`<div class="pad"><div class="lbl">재화 목록</div><div class="hint" style="margin-bottom:8px">노드는 재화를 ID로 참조해요. ID를 바꾸면 모든 참조가 함께 바뀝니다. "직접 수집"은 클릭·기본 생산처럼 노드 없이 얻는 재화예요.</div>
+      <div class="lst">${P.resources.map((r,i)=>`<div style="border:1px solid var(--line);border-radius:8px;padding:8px">
+        <div class="row"><input class="mono" data-rid="${i}" value="${esc(r.id)}" placeholder="id"><input data-rf="name" data-ri="${i}" value="${esc(r.name)}" placeholder="이름"><button class="x fx0" data-rdel="${i}">✕</button></div>
+        <div class="row" style="margin-top:5px"><label class="fx0" style="display:flex;gap:5px;align-items:center;color:var(--tx2)"><input type="checkbox" data-rf="manual" data-ri="${i}" ${r.manual?'checked':''}>직접 수집</label><input data-rf="note" data-ri="${i}" value="${esc(r.note)}" placeholder="메모 (획득 방식 등)"></div>
+      </div>`).join('')}</div>
+      <button class="add" id="addRes">+ 재화 추가</button></div>`;
+    el.querySelectorAll('[data-rf]').forEach(inp=>inp.addEventListener(inp.type==='checkbox'?'change':'input',()=>{
+      const r=P.resources[+inp.dataset.ri]; r[inp.dataset.rf]= inp.type==='checkbox'?inp.checked:inp.value; changed(); }));
+    el.querySelectorAll('[data-rid]').forEach(inp=>inp.addEventListener('change',()=>renameRes(+inp.dataset.rid,inp)));
+    el.querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.resources.splice(+b.dataset.rdel,1); changed(true); renderAll(); }));
+    $('#addRes').onclick=()=>{ let id='res',k=1; while(res(id+k)) k++; P.resources.push({id:id+k,name:'새 재화',manual:false,note:''}); changed(true); renderAll(); };
+  }
+  if(tab==='eras'){
+    el.innerHTML=`<div class="pad"><div class="lbl">시대 / 레이어</div><div class="hint" style="margin-bottom:8px">순서가 그래프의 세로 정렬과 목록 순서에 쓰여요.</div>
+      <div class="lst">${P.eras.map((e,i)=>`<div class="row"><input type="color" class="fx0" data-ef="color" data-ei="${i}" value="${esc(e.color)}"><input class="mono" data-eid="${i}" value="${esc(e.id)}"><input data-ef="name" data-ei="${i}" value="${esc(e.name)}">
+        <button class="x fx0" data-eup="${i}" title="위로">↑</button><button class="x fx0" data-edel="${i}">✕</button></div>`).join('')}</div>
+      <button class="add" id="addEra">+ 시대 추가</button></div>`;
+    el.querySelectorAll('[data-ef]').forEach(inp=>inp.addEventListener('input',()=>{ P.eras[+inp.dataset.ei][inp.dataset.ef]=inp.value; changed(); }));
+    el.querySelectorAll('[data-eid]').forEach(inp=>inp.addEventListener('change',()=>{
+      const e=P.eras[+inp.dataset.eid], nv=slug(inp.value); if(!nv||(nv!==e.id&&era(nv))){ toast('비었거나 중복된 ID예요'); inp.value=e.id; return; }
+      for(const n of P.nodes) if(n.era===e.id) n.era=nv; e.id=nv; changed(true); renderAll(); }));
+    el.querySelectorAll('[data-eup]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.eup; if(i>0){ [P.eras[i-1],P.eras[i]]=[P.eras[i],P.eras[i-1]]; changed(true); renderAll(); } });
+    el.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.eras.splice(+b.dataset.edel,1); changed(true); renderAll(); }));
+    $('#addEra').onclick=()=>{ let k=P.eras.length+1; while(era('era'+k)) k++; P.eras.push({id:'era'+k,name:'새 시대',color:'#'+Math.floor(Math.random()*0xaaaaaa+0x444444).toString(16)}); changed(true); renderAll(); };
+  }
+  if(tab==='proj'){
+    el.innerHTML=`<div class="pad">
+      <div class="lbl">프로젝트 이름</div><input id="pName" value="${esc(P.meta.name)}">
+      <div class="lbl">게임 컨셉 (AI에게 함께 전달돼요)</div><textarea id="pConcept" style="min-height:160px">${esc(P.meta.concept)}</textarea>
+      <div class="hint">장르·톤·핵심 루프·피하고 싶은 것 등을 적어두면 AI 제안 품질이 올라가요.</div>
+      <div class="lbl" style="margin-top:18px">통계</div>
+      <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 시대 ${P.eras.length} · 최대 단계 ${lastLayout?lastLayout.cols:0}</div>
+      <div class="lbl" style="margin-top:18px">초기화</div>
+      <div class="row"><button id="newProj">빈 프로젝트</button><button id="sampleProj">샘플 불러오기</button></div>
+      <div class="hint">현재 작업은 실행 취소(Ctrl+Z)로 되돌릴 수 있어요. 중요한 데이터는 먼저 JSON으로 내보내 두세요.</div>
+    </div>`;
+    $('#pName').oninput=e=>{ P.meta.name=e.target.value; $('#projName').textContent=P.meta.name; changed(); };
+    $('#pConcept').oninput=e=>{ P.meta.concept=e.target.value; changed(); };
+    $('#newProj').onclick=e=>confirmBtn(e.target,()=>{ P=blankProject(); sel=null; fitted=false; changed(true); renderAll(); });
+    $('#sampleProj').onclick=e=>confirmBtn(e.target,()=>{ P=sample(); sel=null; fitted=false; changed(true); renderAll(); });
+  }
+}
+function renameRes(i,inp){
+  const r=P.resources[i], nv=slug(inp.value);
+  if(!nv||(nv!==r.id&&res(nv))){ toast('비었거나 중복된 ID예요'); inp.value=r.id; return; }
+  const old=r.id; if(old===nv){ inp.value=nv; return; }
+  for(const n of P.nodes){ n.cost.forEach(c=>{ if(c.resource===old) c.resource=nv; });
+    [...n.requires.all,...n.requires.any].forEach(c=>{ if(c.resource===old) c.resource=nv; });
+    n.effects.forEach(e=>{ if(e.target===old) e.target=nv; else if(e.target.startsWith(old+'.')) e.target=nv+e.target.slice(old.length); }); }
+  r.id=nv; changed(true); renderAll();
+}
+const rank=l=>({e:0,w:1,i:2})[l]; const lvColor=l=>({e:'var(--err)',w:'var(--warn)',i:'var(--info)'})[l];
+function confirmBtn(b,fn){
+  if(b.dataset.armed){ fn(); return; }
+  const t=b.textContent; b.dataset.armed=1; b.classList.add('confirm'); b.textContent= t.length<=2?'삭제?':'정말요?';
+  setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.classList.remove('confirm'); b.textContent=t; } },2500);
+}
+
+/* ================= 오른쪽: 노드 편집 ================= */
+function select(id){ sel=id&&node(id)?id:null; renderAll(); }
+function addNode(){
+  const base = sel?node(sel):null;
+  const id=uniqueId('new_node');
+  const n={id,name:'새 업그레이드',era:base?base.era:(eraFilter||P.eras[0]?.id||''),status:'idea',maxLevel:1,
+    cost:P.resources[0]?[{resource:P.resources[0].id,base:10,growth:1}]:[],
+    requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:[]};
+  P.nodes.push(n); sel=id; changed(true); renderAll(); centerOn(id);
+  setTimeout(()=>{ const f=document.querySelector('#right [data-p="name"]'); if(f){ f.focus(); f.select(); } },0);
+  if(base) toast(`"${base.name}"를 요구하는 새 노드를 만들었어요`);
+}
+function renderRight(){
+  const el=$('#right'); const n=sel&&node(sel);
+  if(!n){
+    el.innerHTML=`<div class="empty">노드를 선택하세요<br><br><span style="font-size:12px">그래프나 목록에서 클릭 · 빈 곳 드래그로 이동 · 휠로 확대/축소<br><br>노드를 선택한 채 <b>+ 노드</b>를 누르면<br>그 노드를 요구하는 다음 노드가 생겨요</span></div>`; return;
+  }
+  const resOpts=v=>P.resources.map(r=>`<option value="${esc(r.id)}" ${r.id===v?'selected':''}>${esc(r.name)} (${esc(r.id)})</option>`).join('') + (res(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
+  const nodeOpts=v=>P.nodes.filter(m=>m.id!==n.id).map(m=>`<option value="${esc(m.id)}" ${m.id===v?'selected':''}>${esc(m.name)} (${esc(m.id)})</option>`).join('') + (node(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
+  const condRows=(kind)=>n.requires[kind].map((c,i)=>{ const t=condType(c), p=`requires.${kind}.${i}`;
+    let body='';
+    if(t==='node') body=`<select data-p="${p}.node">${nodeOpts(c.node)}</select><input type="number" min="1" data-p="${p}.minLevel" data-t="num" value="${c.minLevel}" title="필요 레벨" style="width:62px" class="fx0">`;
+    if(t==='resource') body=`<select data-p="${p}.resource">${resOpts(c.resource)}</select><input type="number" data-p="${p}.reached" data-t="num" value="${c.reached}" title="누적/보유 도달량" style="width:80px" class="fx0">`;
+    if(t==='custom') body=`<input data-p="${p}.custom" value="${esc(c.custom)}" placeholder="예: 외계인 탐사 1회">`;
+    return `<div class="row"><select class="fx0" style="width:74px" data-ctype="${p}"><option value="node" ${t==='node'?'selected':''}>노드</option><option value="resource" ${t==='resource'?'selected':''}>재화 도달</option><option value="custom" ${t==='custom'?'selected':''}>기타</option></select>${body}<button class="x fx0" data-del="${p}">✕</button></div>`; }).join('');
+  const targets=[...P.resources.flatMap(r=>[r.id,r.id+'.production',r.id+'.value',r.id+'.storage']),
+    ...new Set(P.nodes.flatMap(m=>m.effects.map(e=>e.target)).filter(Boolean))];
+  const dependents=P.nodes.filter(m=>nodeDeps(m).includes(n.id));
+  el.innerHTML=`
+  <div class="sec">
+    <h3>노드 <small>${esc(n.id)}</small><span class="sp"></span>
+      <button class="ghost" id="dupNode" title="복제">⧉ 복제</button><button class="ghost danger" id="delNode">삭제</button></h3>
+    <div class="row"><div><div class="lbl">이름</div><input data-p="name" value="${esc(n.name)}"></div>
+      <div><div class="lbl">ID</div><input class="mono" id="nodeId" value="${esc(n.id)}"></div></div>
+    <div class="row"><div><div class="lbl">시대</div><select data-p="era">${P.eras.map(e=>`<option value="${esc(e.id)}" ${e.id===n.era?'selected':''}>${esc(e.name)}</option>`).join('')}${era(n.era)?'':`<option value="${esc(n.era)}" selected>⚠ ${esc(n.era||'(없음)')}</option>`}</select></div>
+      <div><div class="lbl">상태</div><select data-p="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===n.status?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div style="flex:0 0 74px"><div class="lbl">최대 Lv</div><input type="number" min="1" data-p="maxLevel" data-t="num" value="${n.maxLevel}"></div></div>
+  </div>
+  <div class="sec">
+    <h3>비용 <small>Lv n 가격 = 기본 × 증가율^(n−1)</small></h3>
+    <div class="lst">${n.cost.map((c,i)=>`<div class="row"><select data-p="cost.${i}.resource">${resOpts(c.resource)}</select>
+      <input type="number" data-p="cost.${i}.base" data-t="num" value="${c.base}" title="기본 비용" style="width:76px" class="fx0">
+      <input type="number" step="0.01" data-p="cost.${i}.growth" data-t="num" value="${c.growth}" title="레벨당 증가율" style="width:64px" class="fx0">
+      <button class="x fx0" data-del="cost.${i}">✕</button></div>`).join('')}</div>
+    <button class="add" data-add="cost">+ 비용 재화</button>
+    <div id="costPrev"></div>
+  </div>
+  <div class="sec">
+    <h3>해금 조건 · 모두 충족 <small>AND</small></h3>
+    <div class="lst">${condRows('all')}</div><button class="add" data-add="requires.all">+ 조건</button>
+    <h3 style="margin-top:12px">해금 조건 · 하나 이상 <small>OR (비어 있으면 무시)</small></h3>
+    <div class="lst">${condRows('any')}</div><button class="add" data-add="requires.any">+ 조건</button>
+  </div>
+  <div class="sec">
+    <h3>효과 <small>설명에서 {value1}, {value2}…로 참조</small></h3>
+    <div class="lst">${n.effects.map((e,i)=>`<div style="border:1px solid var(--line);border-radius:7px;padding:6px">
+      <div class="row"><span class="fx0 mono muted" style="width:18px">${i+1}</span><select data-p="effects.${i}.type">${Object.entries(EFFECT_TYPES).map(([k,v])=>`<option value="${k}" ${k===e.type?'selected':''}>${v}</option>`).join('')}</select>
+        <button class="x fx0" data-del="effects.${i}">✕</button></div>
+      <div class="row" style="margin-top:5px"><input class="mono" list="tgts" data-p="effects.${i}.target" value="${esc(e.target)}" placeholder="${e.type==='produce'?'재화 id':'대상 (예: wood.production)'}">
+        <input data-p="effects.${i}.value" data-t="numOrStr" value="${esc(e.value)}" style="width:70px" class="fx0" title="값">
+        <label class="fx0" style="display:flex;gap:4px;align-items:center;color:var(--tx2);font-size:12px"><input type="checkbox" data-p="effects.${i}.perLevel" data-t="bool" ${e.perLevel?'checked':''}>레벨당</label></div>
+    </div>`).join('')}</div>
+    <datalist id="tgts">${[...new Set(targets)].map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
+    <button class="add" data-add="effects">+ 효과</button>
+    <div class="lbl">플레이어에게 보이는 설명</div>
+    <textarea data-p="description" placeholder="예: 나무 생산량 ×{value1}">${esc(n.description)}</textarea>
+    <div class="prev" id="descPrev"></div>
+  </div>
+  <div class="sec">
+    <h3>디자인 메모 <small>의도·밸런스 생각 (AI에게도 전달)</small></h3>
+    <textarea data-p="designNote" placeholder="왜 이 노드가 필요한지, 언제쯤 사게 하고 싶은지">${esc(n.designNote)}</textarea>
+    <div class="lbl">태그 (쉼표 구분)</div><input data-p="tags" data-t="tags" value="${esc(n.tags.join(', '))}">
+  </div>
+  <div class="sec">
+    <h3>이 노드가 열어주는 노드 <small>${dependents.length}개</small></h3>
+    <div class="chips">${dependents.map(m=>`<span class="chip" data-go="${esc(m.id)}">${esc(m.name)}</span>`).join('')||'<span class="muted">없음</span>'}</div>
+    <h3 style="margin-top:12px">이 노드의 문제</h3><div id="nodeIssues"></div>
+  </div>`;
+  renderDerived();
+  // 바인딩
+  el.querySelectorAll('[data-p]').forEach(inp=>{
+    const ev = inp.tagName==='SELECT'||inp.type==='checkbox' ? 'change':'input';
+    inp.addEventListener(ev,()=>{ setPath(n,inp.dataset.p,readVal(inp)); changed(); renderDerived();
+      if(inp.tagName==='SELECT'||inp.type==='checkbox') snapshot(); });
+  });
+  el.querySelectorAll('[data-ctype]').forEach(s=>s.onchange=()=>{ const t=s.value;
+    setPath(n,s.dataset.ctype, t==='node'?{node:P.nodes.find(m=>m.id!==n.id)?.id||'',minLevel:1}:t==='resource'?{resource:P.resources[0]?.id||'',reached:100}:{custom:''});
+    changed(true); renderRight(); });
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ const parts=b.dataset.del.split('.'); const i=+parts.pop(); getPath(n,parts.join('.')).splice(i,1); changed(true); renderAll(); });
+  el.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{ const list=getPath(n,b.dataset.add); const k=b.dataset.add;
+    if(k==='cost') list.push({resource:P.resources.find(r=>!n.cost.some(c=>c.resource===r.id))?.id||P.resources[0]?.id||'',base:10,growth:n.maxLevel>1?1.15:1});
+    else if(k==='effects') list.push({type:'multiply',target:'',value:1.1,perLevel:n.maxLevel>1});
+    else list.push(P.nodes.length>1?{node:P.nodes.find(m=>m.id!==n.id).id,minLevel:1}:{custom:''});
+    changed(true); renderAll(); });
+  el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ select(c.dataset.go); centerOn(c.dataset.go); });
+  $('#nodeId').addEventListener('change',e=>renameNode(n,e.target));
+  $('#delNode').onclick=e=>confirmBtn(e.target,()=>{
+    const refs=P.nodes.filter(m=>nodeDeps(m).includes(n.id));
+    P.nodes=P.nodes.filter(m=>m!==n); sel=null; changed(true); renderAll();
+    toast(refs.length?`삭제됨 — ${refs.length}개 노드에 끊긴 참조가 남았어요 (검증 참고)`:'삭제됨');
+  });
+  $('#dupNode').onclick=()=>{ const c=JSON.parse(JSON.stringify(n)); c.id=uniqueId(n.id+'_copy'); c.name=n.name+' (복사)'; P.nodes.push(c); sel=c.id; changed(true); renderAll(); centerOn(c.id); };
+}
+function renderDerived(){
+  const n=sel&&node(sel); if(!n) return;
+  const lv=Math.min(n.maxLevel,10);
+  const cp=$('#costPrev');
+  if(cp){ if(n.cost.length && n.maxLevel>1){
+      const levels=[...Array(lv)].map((_,i)=>i+1);
+      cp.innerHTML=`<table class="cost"><tr><th>Lv</th>${n.cost.map(c=>`<th>${esc(resName(c.resource))}</th>`).join('')}</tr>
+        ${levels.map(l=>`<tr><td>${l}</td>${n.cost.map(c=>`<td>${fmt(costAt(c,l))}</td>`).join('')}</tr>`).join('')}
+        <tr><td class="muted">합계${n.maxLevel>10?' (10Lv)':''}</td>${n.cost.map(c=>`<td style="color:var(--acc2)">${fmt(levels.reduce((a,l)=>a+costAt(c,l),0))}</td>`).join('')}</tr></table>
+        ${n.maxLevel>10?`<div class="hint">Lv ${n.maxLevel}: ${n.cost.map(c=>resName(c.resource)+' '+fmt(costAt(c,n.maxLevel))).join(', ')}</div>`:''}`;
+    } else cp.innerHTML=''; }
+  const dp=$('#descPrev'); if(dp) dp.textContent = describe(n) || '(설명 미리보기)';
+  const ni=$('#nodeIssues'); if(ni){ const is=validate().filter(i=>i.id===n.id);
+    ni.innerHTML=is.length?is.map(i=>`<div style="color:${lvColor(i.lv)};font-size:12px">● ${esc(i.msg)}</div>`).join(''):'<span style="color:var(--ok);font-size:12px">✓ 문제 없음</span>'; }
+}
+function readVal(inp){
+  const t=inp.dataset.t;
+  if(t==='bool') return inp.checked;
+  if(t==='num') return inp.value===''?0:num(inp.value);
+  if(t==='numOrStr'){ const v=inp.value.trim(); return v!==''&&Number.isFinite(+v)?+v:inp.value; }
+  if(t==='tags') return inp.value.split(',').map(s=>s.trim()).filter(Boolean);
+  return inp.value;
+}
+function getPath(o,p){ return p.split('.').reduce((a,k)=>a[/^\d+$/.test(k)?+k:k],o); }
+function setPath(o,p,v){ const ks=p.split('.'); const last=ks.pop(); const t=ks.reduce((a,k)=>a[/^\d+$/.test(k)?+k:k],o); t[/^\d+$/.test(last)?+last:last]=v; }
+function renameNode(n,inp){
+  const nv=slug(inp.value);
+  if(!nv){ toast('ID는 영문·숫자·_ 만 쓸 수 있어요'); inp.value=n.id; return; }
+  if(nv!==n.id && node(nv)){ toast('이미 있는 ID예요'); inp.value=n.id; return; }
+  const old=n.id; for(const m of P.nodes) [...m.requires.all,...m.requires.any].forEach(c=>{ if(c.node===old) c.node=nv; });
+  n.id=nv; sel=nv; changed(true); renderAll();
+}
+
+/* ================= 상단 / 검증 배지 ================= */
+function renderTop(issues){
+  $('#projName').textContent=P.meta.name;
+  const c={e:0,w:0,i:0}; issues.forEach(i=>c[i.lv]++);
+  $('#vbadge').innerHTML = (c.e?`<span class="pill e">오류 ${c.e}</span>`:'')+(c.w?`<span class="pill w">경고 ${c.w}</span>`:'')+(c.i?`<span class="pill i">참고 ${c.i}</span>`:'')+(!c.e&&!c.w&&!c.i?'<span class="pill ok">✓ 검증 통과</span>':'');
+}
+$('#vbadge').onclick=()=>{
+  const issues=validate().sort((a,b)=>rank(a.lv)-rank(b.lv));
+  openModal('검증 결과', issues.length? issues.map((i,k)=>`<div class="vitem" data-k="${k}"><span style="color:${lvColor(i.lv)}">●</span><div><div>${esc(i.msg)}</div>${i.id?`<div class="mono muted">${esc(node(i.id)?.name||'')} · ${esc(i.id)}</div>`:''}</div></div>`).join('') : '<div class="empty">문제 없음 ✓</div>',
+    [['닫기',closeModal]]);
+  document.querySelectorAll('.vitem').forEach(v=>v.onclick=()=>{ const i=issues[+v.dataset.k]; if(i.id&&node(i.id)){ closeModal(); tab='nodes'; select(i.id); centerOn(i.id); } });
+};
+
+/* ================= 모달 ================= */
+function openModal(title,body,buttons){
+  $('#mTitle').textContent=title; $('#mBody').innerHTML=body; const ft=$('#mFoot'); ft.innerHTML='';
+  for(const [label,fn,cls] of buttons){ const b=document.createElement('button'); b.textContent=label; if(cls) b.className=cls; b.onclick=()=>fn(b); ft.appendChild(b); }
+  $('#modal').classList.add('on');
+}
+function closeModal(){ $('#modal').classList.remove('on'); }
+$('#mClose').onclick=closeModal;
+$('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeModal(); });
+async function copyText(t,b){
+  try{ await navigator.clipboard.writeText(t); toast('복사했어요'); if(b){ const o=b.textContent; b.textContent='✓ 복사됨'; setTimeout(()=>b.textContent=o,1500); } }
+  catch(e){ const ta=document.querySelector('#mBody textarea'); if(ta){ ta.focus(); ta.select(); } toast('자동 복사가 막혔어요 — 선택된 텍스트를 Ctrl+C 하세요'); }
+}
+const canDownload = (()=>{ try{ return window.self===window.top; }catch(e){ return false; } })();
+function download(name,text){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'application/json'})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+function exportJSON(){ return JSON.stringify(normalize(P),null,2); }
+
+$('#exportBtn').onclick=()=>{
+  const j=exportJSON();
+  const btns=[['닫기',closeModal],['복사',b=>copyText(j,b),'pri']];
+  if(canDownload) btns.splice(1,0,['파일로 저장',()=>download((slug(P.meta.name)||'upgrade-tree')+'.json',j)]);
+  openModal('JSON 내보내기',`<div class="hint" style="margin:0 0 8px">이 JSON이 원본 데이터예요. 게임 프로젝트의 git에 넣어두면 버전 관리가 돼요.${canDownload?'':' (이 화면에선 파일 저장이 막혀 있어서 복사해서 .json으로 저장하세요)'}</div><textarea class="big" readonly>${esc(j)}</textarea>`,btns);
+};
+
+function aiMarkdown(request){
+  const issues=validate();
+  const L=lastLayout||layout();
+  return `# 인크리멘탈 업그레이드 트리 — ${P.meta.name}
+
+## 게임 컨셉
+${P.meta.concept||'(작성되지 않음)'}
+
+## 데이터 스키마 (${SCHEMA})
+- \`resources[]\`: { id, name, manual(노드 없이 직접 얻는 재화인지), note }
+- \`eras[]\`: { id, name, color } — 배열 순서가 진행 순서
+- \`nodes[]\`: 업그레이드 노드
+  - \`id\`: snake_case 영문, 고유. 다른 노드가 이 값으로 참조함
+  - \`name\`, \`era\`(eras.id), \`status\`: idea | wip | done | cut
+  - \`maxLevel\`: 1이면 1회성, 2 이상이면 반복 구매
+  - \`cost[]\`: { resource, base, growth } — 레벨 n 가격 = ceil(base × growth^(n−1))
+  - \`requires.all[]\`: 모두 충족해야 함 (AND) / \`requires.any[]\`: 하나 이상 충족 (OR, 비어 있으면 무시)
+    - 조건 형태: { node, minLevel } | { resource, reached } (해당 재화 도달량) | { custom } (자유 텍스트)
+  - \`effects[]\`: { type, target, value, perLevel }
+    - type: produce(target 재화를 초당 value 생산) | multiply(target에 ×value) | add(target에 +value) | unlock(target 기능 해금) | custom
+    - target 예: \`wood.production\`, \`gather.speed\`, \`food.storage\`
+    - perLevel: true면 레벨마다 효과가 누적
+  - \`description\`: 플레이어에게 보이는 문장. \`{value1}\`, \`{value2}\`…는 effects[0], effects[1]…의 value, \`{maxLevel}\`도 가능
+  - \`designNote\`: 디자이너의 의도 메모 (게임에 노출되지 않음)
+  - \`tags[]\`
+
+## 현재 상태 요약
+- 재화 ${P.resources.length}개: ${P.resources.map(r=>`${r.name}(${r.id})`).join(', ')}
+- 시대: ${P.eras.map(e=>`${e.name}(${e.id}) ${P.nodes.filter(n=>n.era===e.id).length}개`).join(' → ')}
+- 노드 ${P.nodes.length}개, 의존 깊이 ${L.cols}단계
+- 검증: ${issues.length?issues.filter(i=>i.lv!=='i').map(i=>`[${i.lv==='e'?'오류':'경고'}] ${i.id?i.id+': ':''}${i.msg}`).join(' / ')||'오류·경고 없음':'문제 없음'}
+
+## 현재 데이터
+\`\`\`json
+${exportJSON()}
+\`\`\`
+
+## 요청
+${request||'(여기에 요청을 적어주세요)'}
+
+## 응답 규칙
+1. 수정이 반영된 **전체 JSON**을 \`\`\`json 코드블록 하나로 반환해 주세요. (위 스키마 그대로, 이 에디터에 다시 불러옵니다)
+2. 기존 노드의 id는 바꾸지 마세요. 새 노드 id는 snake_case 영문으로, 기존과 겹치지 않게.
+3. 수치 효과는 effects에 구조화하고, description에서는 {value1} 같은 템플릿으로 참조해 주세요.
+4. 새로 추가하거나 크게 바꾼 노드에는 designNote에 의도를 짧게 적어 주세요.
+5. JSON 뒤에 무엇을 왜 바꿨는지 짧게 요약해 주세요.
+`;
+}
+$('#aiBtn').onclick=()=>{
+  openModal('AI에게 넘기기',`
+    <div class="lbl">요청 (선택)</div>
+    <textarea id="aiReq" placeholder="예: 고대 시대 노드를 12개 추가해줘. 청동기·문자·교역 축으로, 첫 고대 노드는 30분 안에 살 수 있게."></textarea>
+    <div class="row" style="margin:6px 0 0;flex-wrap:wrap;gap:5px" id="aiPresets"></div>
+    <div class="lbl" style="margin-top:12px">전달할 내용 (컨셉 + 스키마 설명 + 현재 JSON + 응답 규칙)</div>
+    <textarea class="big" id="aiOut" readonly></textarea>
+    <div class="hint">AI의 응답을 통째로 복사해서 <b>불러오기</b>에 붙여넣으면, 바뀐 점을 확인한 뒤 적용할 수 있어요.</div>`,
+    [['닫기',closeModal],['복사',b=>copyText($('#aiOut').value,b),'pri']]);
+  const presets=['이 트리의 밸런스와 진행 속도를 검토해줘','막다른 노드와 지루한 구간을 찾아 개선안을 줘','다음 시대 노드 10개를 제안해줘','모든 노드 설명을 코믹한 톤으로 다듬어줘'];
+  $('#aiPresets').innerHTML=presets.map(p=>`<span class="chip">${esc(p)}</span>`).join('');
+  const upd=()=>$('#aiOut').value=aiMarkdown($('#aiReq').value.trim()); upd();
+  $('#aiReq').oninput=upd;
+  document.querySelectorAll('#aiPresets .chip').forEach(c=>c.onclick=()=>{ $('#aiReq').value=c.textContent; upd(); });
+};
+
+/* ================= 불러오기 + 차이 보기 ================= */
+function extractJSON(text){
+  text=text.trim();
+  try{ return JSON.parse(text); }catch(e){}
+  const blocks=[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m=>m[1]);
+  for(const b of blocks.sort((a,b)=>b.length-a.length)){ try{ return JSON.parse(b); }catch(e){} }
+  const s=text.indexOf('{'), e=text.lastIndexOf('}');
+  if(s>=0&&e>s){ try{ return JSON.parse(text.slice(s,e+1)); }catch(err){ throw new Error('JSON 형식 오류: '+err.message); } }
+  throw new Error('JSON을 찾지 못했어요');
+}
+function diff(a,b){
+  const out=[];
+  const cmp=(label,la,lb,nameOf)=>{
+    const A=new Map(la.map(x=>[x.id,x])), B=new Map(lb.map(x=>[x.id,x]));
+    for(const [id,x] of B) if(!A.has(id)) out.push(['a',label,id,nameOf(x)]);
+    for(const [id,x] of A) if(!B.has(id)) out.push(['r',label,id,nameOf(x)]);
+    for(const [id,x] of B) if(A.has(id)){ const y=A.get(id);
+      const fields=Object.keys({...x,...y}).filter(k=>JSON.stringify(x[k])!==JSON.stringify(y[k]));
+      if(fields.length) out.push(['c',label,id,nameOf(x)+' — '+fields.join(', ')]); }
+  };
+  cmp('재화',a.resources,b.resources,x=>x.name); cmp('시대',a.eras,b.eras,x=>x.name); cmp('노드',a.nodes,b.nodes,x=>x.name);
+  if(a.meta.name!==b.meta.name||a.meta.concept!==b.meta.concept) out.push(['c','프로젝트','meta','이름/컨셉']);
+  return out;
+}
+$('#importBtn').onclick=()=>{
+  openModal('불러오기',`
+    <div class="hint" style="margin:0 0 8px">JSON 파일을 고르거나, JSON 또는 AI 응답 전체를 붙여넣으세요. 코드블록 안의 JSON을 자동으로 찾아요.</div>
+    <div class="row" style="margin-bottom:8px"><input type="file" id="impFile" accept=".json,application/json,.txt,.md"></div>
+    <textarea class="big" id="impText" placeholder="여기에 붙여넣기"></textarea>
+    <div id="impDiff" style="margin-top:10px"></div>`,
+    [['닫기',closeModal],['변경점 확인',checkImport],['적용',applyImport,'pri']]);
+  $('#impFile').onchange=async e=>{ const f=e.target.files[0]; if(f){ $('#impText').value=await f.text(); checkImport(); } };
+};
+let pendingImport=null;
+function checkImport(){
+  const box=$('#impDiff'); pendingImport=null;
+  try{
+    const raw=extractJSON($('#impText').value); const np=normalize(raw);
+    if(!np.nodes.length && !np.resources.length) throw new Error('노드나 재화가 없는 데이터예요');
+    const d=diff(normalize(P),np); pendingImport=np;
+    const sym={a:'+',r:'−',c:'~'};
+    box.innerHTML=`<div class="lbl">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(노드 ${np.nodes.length} · 재화 ${np.resources.length} · 시대 ${np.eras.length})</span></div>
+      <div class="diff">${d.map(([k,l,id,info])=>`<div class="${k}">${sym[k]} [${l}] ${esc(id)} ${esc(info)}</div>`).join('')||'<span class="muted">현재와 동일해요</span>'}</div>`;
+    return true;
+  }catch(e){ box.innerHTML=`<div style="color:var(--err)">${esc(e.message)}</div>`; return false; }
+}
+function applyImport(){
+  if(!pendingImport && !checkImport()) return;
+  snapshot(); P=pendingImport; pendingImport=null; if(sel&&!node(sel)) sel=null; fitted=false;
+  changed(true); renderAll(); closeModal(); toast('불러왔어요 — 되돌리려면 Ctrl+Z');
+}
+
+/* ================= 전체 렌더 ================= */
+let rTimer=null;
+function scheduleRender(){ clearTimeout(rTimer); rTimer=setTimeout(()=>{ const is=validate(); renderGraph(is); renderTop(is); if(tab==='nodes') renderLeft(is); },120); }
+function renderAll(){ const is=validate(); renderGraph(is); renderTop(is); renderLeft(is); renderRight(); }
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{ tab=b.dataset.tab; renderLeft(validate()); });
+$('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
+window.addEventListener('keydown',e=>{
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!typing){ e.preventDefault(); e.shiftKey?redo():undo(); }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'&&!typing){ e.preventDefault(); redo(); }
+  if(e.key==='Escape'){ if($('#modal').classList.contains('on')) closeModal(); else if(!typing) select(null); }
+  if(!typing && (e.key==='n'||e.key==='N') && !e.ctrlKey && !e.metaKey){ e.preventDefault(); addNode(); }
+  if(!typing && e.key==='f' && !e.ctrlKey && !e.metaKey) fit();
+});
+window.addEventListener('resize',()=>applyView());
+
+load(); snapshot(); renderAll();
+</script>
+</body>
+</html>
