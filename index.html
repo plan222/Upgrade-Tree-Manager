@@ -102,6 +102,29 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
 .edge.dim{opacity:.1}
 .colhdr{fill:var(--tx3);font-size:11px;font-family:var(--mono)}
 .empty{padding:40px 20px;text-align:center;color:var(--tx3)}
+/* 프로젝트 선택 */
+#picker{position:fixed;inset:0;background:#0f1116f2;display:none;align-items:center;justify-content:center;z-index:70}
+#picker.on{display:flex}
+#picker .pbox{width:min(720px,94vw);max-height:88vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:14px;overflow:hidden}
+#picker .phd{padding:18px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:10px}
+#picker .phd b{font-size:15px}
+#picker .phd b span{color:var(--acc)}
+#picker .phd small{color:var(--tx3)}
+#picker .plist{overflow:auto;padding:8px;min-height:120px}
+#picker .prow{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent}
+#picker .prow:hover{background:var(--panel2);border-color:var(--line2)}
+#picker .prow.cur{background:#2a2418;border-color:#4a3c1a}
+#picker .prow .sw{width:9px;height:26px;border-radius:3px;flex:0 0 9px}
+#picker .prow .nm{flex:1;min-width:0}
+#picker .prow .nm b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#picker .prow .nm span{color:var(--tx3);font-size:11.5px}
+#picker .prow .acts{display:flex;gap:2px;opacity:0}
+#picker .rn{font-weight:500}
+#picker .prow:hover .acts,#picker .prow .acts:focus-within{opacity:1}
+#picker .pft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#picker .pft .sp{flex:1}
+#top .proj{cursor:pointer}
+#top .proj:hover{color:var(--tx)}
 /* 그래프 상호작용 */
 .gnode{cursor:grab}
 .gnode .port{fill:#1f232c;stroke:var(--acc);stroke-width:1.5;opacity:0;cursor:crosshair}
@@ -146,7 +169,7 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
 <div id="app">
   <div id="top">
     <div class="title">⬡ <span>Upgrade</span> Tree</div>
-    <div class="proj" id="projName"></div>
+    <div class="proj" id="projName" title="프로젝트 전환 (클릭)"></div>
     <button class="ghost" id="undoBtn" title="실행 취소 (Ctrl+Z)">↶</button>
     <button class="ghost" id="redoBtn" title="다시 실행 (Ctrl+Shift+Z)">↷</button>
     <div class="sp"></div>
@@ -162,7 +185,6 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
       <div class="tabs" id="tabs">
         <button data-tab="nodes" class="on">노드</button>
         <button data-tab="res">재화</button>
-        <button data-tab="eras">시대</button>
         <button data-tab="proj">프로젝트</button>
       </div>
       <div id="leftBody" style="flex:1"></div>
@@ -182,17 +204,33 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
   </div>
 </div>
 <div id="modal"><div class="box"><div class="hd"><span id="mTitle"></span><div class="sp"></div><button class="ghost" id="mClose">✕</button></div><div class="bd" id="mBody"></div><div class="ft" id="mFoot"></div></div></div>
+<div id="picker"><div class="pbox">
+  <div class="phd"><b>⬡ <span>Upgrade</span> Tree</b><small>프로젝트를 고르세요</small></div>
+  <div class="plist" id="plist"></div>
+  <div class="pft">
+    <button class="pri" id="pkNew">+ 새 프로젝트</button>
+    <button id="pkSample">샘플 (Stranded God)</button>
+    <button id="pkFile">JSON 파일 열기…</button>
+    <div class="sp"></div>
+    <button class="ghost" id="pkClose">닫기</button>
+  </div>
+</div></div>
 <div id="toast"></div>
 
 <script>
 'use strict';
 /* ================= 데이터 ================= */
-const SCHEMA = 'upgrade-tree/1';
+const SCHEMA = 'upgrade-tree/2';
 const STATUS = {idea:'아이디어', wip:'작업 중', done:'구현됨', cut:'폐기'};
+const STATUS_COLOR = {idea:'#7a8295', wip:'#6cb4ff', done:'#5fd39a', cut:'#5a4350'};
 const EFFECT_TYPES = {
   produce:'생산 (+초당)', multiply:'배율 (×)', add:'가산 (+)', unlock:'기능 해금', custom:'기타'
 };
-const STORE_KEY = 'upgradeTreeEditor.project.v1';
+const STORE_KEY = 'upgradeTreeEditor.project.v1'; // 구버전(단일 프로젝트) 키 — 이관용
+const LIST_KEY = 'upgradeTreeEditor.projects';
+const LAST_KEY = 'upgradeTreeEditor.lastProject';
+const MIG_KEY  = 'upgradeTreeEditor.migrated';
+const dataKey = id=>'upgradeTreeEditor.proj.'+id;
 
 function sample(){
   return {
@@ -207,61 +245,63 @@ function sample(){
       {id:'stone', name:'돌', manual:true, note:'바닥에서 클릭해 줍기 (유한)'},
       {id:'population', name:'인구', manual:false, note:''}
     ],
-    eras: [
-      {id:'primitive', name:'원시', color:'#f2a541'},
-      {id:'ancient', name:'고대', color:'#6cb4ff'}
-    ],
     nodes: [
-      N('fire','불','primitive',1,[['wood',1,1],['stone',1,1]],[],[],[{type:'unlock',target:'campfire',value:1,perLevel:false}],
+      N('fire','불',['원시'],1,[['wood',1,1],['stone',1,1]],[],[],[{type:'unlock',target:'campfire',value:1,perLevel:false}],
         '불을 피운다. 모닥불 건설이 해금된다.','첫 테크. 식량 없이 나무1·돌1만으로.','done'),
-      N('cooking','요리','primitive',1,[['food',10,1],['wood',5,1]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'food.value',value:1.5,perLevel:false}],
+      N('cooking','요리',['원시'],1,[['food',10,1],['wood',5,1]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'food.value',value:1.5,perLevel:false}],
         '식량 가치 ×{value1}','불 다음 바로 보이는 보상.','idea'),
-      N('stone_tools','뗀석기','primitive',5,[['stone',8,1.4]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'gather.speed',value:1.25,perLevel:true}],
+      N('stone_tools','뗀석기',['원시'],5,[['stone',8,1.4]],[{node:'fire',minLevel:1}],[],[{type:'multiply',target:'gather.speed',value:1.25,perLevel:true}],
         '레벨당 채집 속도 ×{value1}','클릭 피로를 덜어주는 첫 반복 업그레이드.','idea'),
-      N('alien_scout','외계인 탐사','primitive',3,[['food',15,1.8]],[{node:'fire',minLevel:1}],[],[{type:'add',target:'explore.radius',value:1,perLevel:true}],
+      N('alien_scout','외계인 탐사',['원시'],3,[['food',15,1.8]],[{node:'fire',minLevel:1}],[],[{type:'add',target:'explore.radius',value:1,perLevel:true}],
         '활동 반경 +{value1} (레벨당)','원시 한정. 외계인이 직접 탐사해 반경 확장.','idea'),
-      N('gathering_basket','채집 바구니','primitive',3,[['wood',12,1.5]],[{node:'stone_tools',minLevel:1}],[],[{type:'add',target:'gather.amount',value:1,perLevel:true}],
+      N('gathering_basket','채집 바구니',['원시'],3,[['wood',12,1.5]],[{node:'stone_tools',minLevel:1}],[],[{type:'add',target:'gather.amount',value:1,perLevel:true}],
         '클릭당 채집량 +{value1}','','idea'),
-      N('shelter','동굴 정비','primitive',1,[['wood',20,1],['stone',20,1]],[{node:'fire',minLevel:1}],[],[{type:'unlock',target:'building_grid',value:1,perLevel:false},{type:'produce',target:'population',value:0.02,perLevel:false}],
+      N('shelter','동굴 정비',['원시'],1,[['wood',20,1],['stone',20,1]],[{node:'fire',minLevel:1}],[],[{type:'unlock',target:'building_grid',value:1,perLevel:false},{type:'produce',target:'population',value:0.02,perLevel:false}],
         '건물 격자(3x3) 해금, 인구 +{value2}/초','동굴은 최초 3x3.','idea'),
-      N('hunting','사냥','primitive',3,[['stone',15,1.6],['food',10,1.6]],[{node:'stone_tools',minLevel:2}],[],[{type:'produce',target:'food',value:0.2,perLevel:true}],
+      N('hunting','사냥',['원시'],3,[['stone',15,1.6],['food',10,1.6]],[{node:'stone_tools',minLevel:2}],[],[{type:'produce',target:'food',value:0.2,perLevel:true}],
         '식량 자동 생산 +{value1}/초 (레벨당)','첫 자동 생산.','idea'),
-      N('language','언어','primitive',1,[['food',60,1]],[{node:'shelter',minLevel:1}],[{resource:'population',reached:10}],[{type:'multiply',target:'research.speed',value:1.2,perLevel:false}],
+      N('language','언어',['원시'],1,[['food',60,1]],[{node:'shelter',minLevel:1}],[{resource:'population',reached:10}],[{type:'multiply',target:'research.speed',value:1.2,perLevel:false}],
         '연구 속도 ×{value1}','인구 10 도달 조건 — 자원 마일스톤 예시.','idea'),
-      N('agriculture','농경','ancient',1,[['food',150,1],['wood',80,1]],[{node:'hunting',minLevel:1},{node:'language',minLevel:1}],[],[{type:'produce',target:'food',value:2,perLevel:false}],
+      N('agriculture','농경',['고대'],1,[['food',150,1],['wood',80,1]],[{node:'hunting',minLevel:1},{node:'language',minLevel:1}],[],[{type:'produce',target:'food',value:2,perLevel:false}],
         '식량 생산 +{value1}/초. 고대 시작.','원시→고대 전환점.','idea'),
-      N('pottery','토기','ancient',1,[['stone',100,1]],[{node:'agriculture',minLevel:1}],[{node:'cooking',minLevel:1},{custom:'점토 지형 발견'}],[{type:'multiply',target:'food.storage',value:2,perLevel:false}],
+      N('pottery','토기',['고대'],1,[['stone',100,1]],[{node:'agriculture',minLevel:1}],[{node:'cooking',minLevel:1},{custom:'점토 지형 발견'}],[{type:'multiply',target:'food.storage',value:2,perLevel:false}],
         '식량 저장량 ×{value1}','OR 조건 예시: 요리 또는 점토 발견.','idea')
     ]
   };
-  function N(id,name,era,maxLevel,cost,all,any,effects,description,designNote,status){
-    return {id,name,era,status,maxLevel,
+  function N(id,name,tags,maxLevel,cost,all,any,effects,description,designNote,status){
+    return {id,name,tags,status,maxLevel,
       cost:cost.map(([resource,base,growth])=>({resource,base,growth})),
-      requires:{all,any},effects,description,designNote,tags:[]};
+      requires:{all,any},effects,description,designNote};
   }
 }
 function blankProject(){
-  return {schema:SCHEMA,meta:{name:'새 프로젝트',concept:''},resources:[{id:'gold',name:'골드',manual:true,note:''}],eras:[{id:'era1',name:'1단계',color:'#f2a541'}],nodes:[]};
+  return {schema:SCHEMA,meta:{name:'새 프로젝트',concept:''},resources:[{id:'gold',name:'골드',manual:true,note:''}],nodes:[]};
 }
 function normalize(p){
   p = p && typeof p==='object' ? p : {};
   const out = {schema:SCHEMA, meta:Object.assign({name:'이름 없음',concept:''}, p.meta||{}),
-    resources:[], eras:[], nodes:[]};
+    resources:[], nodes:[]};
   for(const r of (p.resources||[])) out.resources.push({id:String(r.id??''),name:String(r.name??r.id??''),manual:!!r.manual,note:String(r.note??'')});
-  for(const e of (p.eras||[])) out.eras.push({id:String(e.id??''),name:String(e.name??e.id??''),color:e.color||'#888888'});
+  // upgrade-tree/1 → /2 : 시대(eras)는 없앴다. 옛 데이터의 era는 태그로 옮긴다.
+  const eraName=new Map((p.eras||[]).map(e=>[String(e.id??''),String(e.name??e.id??'')]));
   for(const n of (p.nodes||[])){
     const req = n.requires||{};
     out.nodes.push({
-      id:String(n.id??''), name:String(n.name??n.id??''), era:String(n.era??''), status:STATUS[n.status]?n.status:'idea',
+      id:String(n.id??''), name:String(n.name??n.id??''), status:STATUS[n.status]?n.status:'idea',
       maxLevel: Number.isFinite(+n.maxLevel)&&+n.maxLevel>0 ? +n.maxLevel : 1,
       cost:(n.cost||[]).map(c=>({resource:String(c.resource??''),base:num(c.base),growth:c.growth==null?1:num(c.growth)})),
       requires:{all:(req.all||[]).map(normCond),any:(req.any||[]).map(normCond)},
       effects:(n.effects||[]).map(e=>({type:EFFECT_TYPES[e.type]?e.type:'custom',target:String(e.target??''),value:e.value??0,perLevel:!!e.perLevel})),
-      description:String(n.description??''), designNote:String(n.designNote??''), tags:Array.isArray(n.tags)?n.tags.map(String):[],
+      description:String(n.description??''), designNote:String(n.designNote??''), tags:migTags(n,eraName),
       pos: n.pos && Number.isFinite(+n.pos.x) && Number.isFinite(+n.pos.y) ? {x:Math.round(+n.pos.x),y:Math.round(+n.pos.y)} : null
     });
   }
   return out;
+}
+function migTags(n,eraName){
+  const tags=Array.isArray(n.tags)?n.tags.map(String):[];
+  if(n.era){ const t=eraName.get(String(n.era))||String(n.era); if(t && !tags.includes(t)) tags.push(t); }
+  return tags;
 }
 function normCond(c){
   if(c==null) return {custom:''};
@@ -274,13 +314,16 @@ function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
 function condType(c){return 'node' in c?'node':'resource' in c?'resource':'custom'}
 
 /* ================= 상태 / 저장 / 실행취소 ================= */
-let P, sel=null, selSet=new Set(), tab='nodes', filter='', eraFilter='', view={x:0,y:0,k:1}, fitted=false;
+let P, curId=null, sel=null, selSet=new Set(), tab='nodes', filter='', listFilter='', view={x:0,y:0,k:1}, fitted=false;
 let hist=[], hpos=-1, commitTimer=null;
-function load(){
-  try{ const s=localStorage.getItem(STORE_KEY); if(s){ P=normalize(JSON.parse(s)); return; } }catch(e){}
-  P=normalize(sample());
+function persist(){
+  try{
+    if(!curId) curId=createProject(P);
+    localStorage.setItem(dataKey(curId), JSON.stringify(P));
+    localStorage.setItem(LAST_KEY, curId);
+    touchMeta();
+  }catch(e){}
 }
-function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(P)); }catch(e){} }
 function snapshot(){
   const s=JSON.stringify(P);
   if(hist[hpos]===s) return;
@@ -297,14 +340,155 @@ function afterRestore(){ pruneSel(); persist(); renderAll(); updUndo(); }
 function pruneSel(){ selSet=new Set([...selSet].filter(i=>node(i))); if(sel&&!node(sel)) sel=null; if(!sel&&selSet.size) sel=[...selSet].pop(); }
 function updUndo(){ $('#undoBtn').disabled=hpos<=0; $('#redoBtn').disabled=hpos>=hist.length-1; }
 
+/* ================= 프로젝트 관리 ================= */
+function listProjects(){ try{ return JSON.parse(localStorage.getItem(LIST_KEY))||[]; }catch(e){ return []; } }
+function saveList(l){ try{ localStorage.setItem(LIST_KEY, JSON.stringify(l)); }catch(e){} }
+function newProjId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function projMeta(id){ return listProjects().find(x=>x.id===id); }
+function touchMeta(){
+  const l=listProjects(), e=l.find(x=>x.id===curId); if(!e) return;
+  e.name=P.meta.name; e.updated=Date.now(); e.nodes=P.nodes.length; e.res=P.resources.length;
+  e.file=fileHandle?fileHandle.name:null;
+  saveList(l);
+}
+function createProject(data,name){
+  const id=newProjId(), np=normalize(data);
+  if(name) np.meta.name=name;
+  try{ localStorage.setItem(dataKey(id), JSON.stringify(np)); }catch(e){ toast('저장 공간이 부족해요'); }
+  const l=listProjects();
+  l.unshift({id,name:np.meta.name,updated:Date.now(),nodes:np.nodes.length,res:np.resources.length,file:null});
+  saveList(l);
+  return id;
+}
+function loadProject(id){
+  let data=null; try{ data=JSON.parse(localStorage.getItem(dataKey(id))); }catch(e){}
+  if(!data){ toast('프로젝트 데이터를 찾을 수 없어요'); return false; }
+  curId=id; try{ localStorage.setItem(LAST_KEY,id); }catch(e){}
+  P=normalize(data); sel=null; selSet.clear(); fitted=false; pendingImport=null; pendingHandle=null;
+  hist=[]; hpos=-1; fileHandle=null; dirty=false;
+  renderAll(); snapshot(); attachHandle(id);
+  return true;
+}
+async function attachHandle(id){
+  if(!FS_OK) return;
+  const h=await idbGet('handle.'+id);
+  if(h && curId===id){ fileHandle=h; renderFile(); touchMeta(); }
+}
+function openProject(id){ if(loadProject(id)){ closePicker(); toast(`"${P.meta.name}" 열었어요`); } }
+function duplicateProject(id){
+  const m=projMeta(id); let data=null;
+  try{ data=JSON.parse(localStorage.getItem(dataKey(id))); }catch(e){}
+  if(!data) return;
+  const nid=createProject(data,(m?m.name:data.meta?.name||'프로젝트')+' (복사)');
+  renderPicker(); return nid;
+}
+function deleteProject(id){
+  saveList(listProjects().filter(x=>x.id!==id));
+  try{ localStorage.removeItem(dataKey(id)); }catch(e){}
+  idbSet('handle.'+id,null);
+  if(curId===id){ curId=null; fileHandle=null; dirty=false; }
+  renderPicker();
+}
+function renameProject(id,name){
+  name=String(name||'').trim(); if(!name) return;
+  const l=listProjects(), e=l.find(x=>x.id===id); if(!e) return;
+  e.name=name; saveList(l);
+  try{ const d=JSON.parse(localStorage.getItem(dataKey(id))); d.meta.name=name; localStorage.setItem(dataKey(id),JSON.stringify(d)); }catch(e2){}
+  if(curId===id){ P.meta.name=name; renderTop(validate()); if(tab==='proj') renderLeft(validate()); }
+  renderPicker();
+}
+function migrateOld(){
+  if(localStorage.getItem(MIG_KEY)) return;
+  try{
+    const old=localStorage.getItem(STORE_KEY);
+    if(old && !listProjects().length){
+      const id=createProject(JSON.parse(old));
+      localStorage.setItem(LAST_KEY,id);
+      idbGet('handle').then(h=>{ if(h) idbSet('handle.'+id,h); });
+    }
+  }catch(e){}
+  try{ localStorage.setItem(MIG_KEY,'1'); }catch(e){}
+}
+function ago(t){
+  const d=(Date.now()-t)/1000;
+  if(!Number.isFinite(d)) return '';
+  if(d<60) return '방금';
+  if(d<3600) return Math.floor(d/60)+'분 전';
+  if(d<86400) return Math.floor(d/3600)+'시간 전';
+  if(d<30*86400) return Math.floor(d/86400)+'일 전';
+  return new Date(t).toLocaleDateString('ko-KR');
+}
+function hue(s){ let h=0; for(const c of String(s)) h=(h*31+c.charCodeAt(0))%360; return h; }
+let renamingId=null;
+function renderPicker(){
+  const l=listProjects().slice().sort((a,b)=>(b.updated||0)-(a.updated||0));
+  $('#plist').innerHTML = l.length ? l.map(x=>{
+    const info=[`노드 ${x.nodes??0}`, `재화 ${x.res??0}`, ago(x.updated), x.file?`⌯ ${x.file}`:''].filter(Boolean).join(' · ');
+    const nm = renamingId===x.id
+      ? `<input class="rn" data-ren-input="${esc(x.id)}" value="${esc(x.name||'')}">`
+      : `<b>${esc(x.name||'이름 없음')}</b><span>${esc(info)}</span>`;
+    return `<div class="prow ${x.id===curId?'cur':''}" data-pid="${esc(x.id)}">
+      <span class="sw" style="background:hsl(${hue(x.id)}deg 55% 55%)"></span>
+      <div class="nm">${nm}</div>
+      <div class="acts">
+        <button class="x" data-ren="${esc(x.id)}" title="이름 바꾸기">✎</button>
+        <button class="x" data-dup="${esc(x.id)}" title="복제">⧉</button>
+        <button class="x" data-del="${esc(x.id)}" title="삭제">✕</button>
+      </div></div>`;
+  }).join('') : '<div class="empty">저장된 프로젝트가 없어요<br><br><span style="font-size:12px">아래에서 새로 만들거나, 샘플 · JSON 파일로 시작하세요</span></div>';
+  $('#pkClose').style.display = curId ? '' : 'none';
+  $('#plist').querySelectorAll('.prow').forEach(r=>r.onclick=e=>{
+    if(e.target.closest('.acts')||e.target.closest('input')) return;
+    openProject(r.dataset.pid);
+  });
+  $('#plist').querySelectorAll('[data-ren]').forEach(b=>b.onclick=()=>{ renamingId=b.dataset.ren; renderPicker();
+    const i=$(`[data-ren-input="${b.dataset.ren}"]`); if(i){ i.focus(); i.select(); } });
+  $('#plist').querySelectorAll('[data-ren-input]').forEach(i=>{
+    const done=()=>{ const id=i.dataset.renInput, v=i.value; renamingId=null; renameProject(id,v); };
+    i.onblur=done;
+    i.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); done(); } if(e.key==='Escape'){ e.stopPropagation(); renamingId=null; renderPicker(); } };
+  });
+  $('#plist').querySelectorAll('[data-dup]').forEach(b=>b.onclick=()=>duplicateProject(b.dataset.dup));
+  $('#plist').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>deleteProject(b.dataset.del)));
+}
+function openPicker(){ renamingId=null; renderPicker(); $('#picker').classList.add('on'); }
+function closePicker(){ if(!curId) return; $('#picker').classList.remove('on'); }
+async function openFileAsProject(){
+  const start=async text=>{
+    try{ const id=createProject(extractJSON(text)); openProject(id); }
+    catch(e){ toast(e.message); }
+  };
+  if(!FS_OK){
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json,.txt,.md';
+    inp.onchange=async()=>{ const f=inp.files[0]; if(f) await start(await f.text()); };
+    inp.click(); return;
+  }
+  try{
+    const [h]=await window.showOpenFilePicker({types:[{description:'업그레이드 트리 JSON',
+      accept:{'application/json':['.json'],'text/plain':['.txt','.md']}}]});
+    const text=await (await h.getFile()).text();
+    await start(text);
+    if(curId && /\.json$/i.test(h.name)) linkHandle(h,false);
+  }catch(e){ if(e.name!=='AbortError') toast('열기 실패: '+e.message); }
+}
+function wirePicker(){ // $ 정의보다 앞이라 boot()에서 호출한다
+  $('#pkNew').onclick=()=>openProject(createProject(blankProject(),'새 프로젝트'));
+  $('#pkSample').onclick=()=>openProject(createProject(sample()));
+  $('#pkFile').onclick=openFileAsProject;
+  $('#pkClose').onclick=closePicker;
+  $('#projName').onclick=openPicker;
+}
+
 /* ================= 유틸 ================= */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const node=id=>P.nodes.find(n=>n.id===id);
 const res=id=>P.resources.find(r=>r.id===id);
-const era=id=>P.eras.find(e=>e.id===id);
-const eraIdx=id=>{const i=P.eras.findIndex(e=>e.id===id);return i<0?999:i};
-const eraColor=id=>(era(id)||{}).color||'#666';
+const statusColor=st=>STATUS_COLOR[st]||'#666';
+const allTags=()=>[...new Set(P.nodes.flatMap(n=>n.tags))].sort((a,b)=>a.localeCompare(b,'ko'));
+const matchFilter=n=> !listFilter ? true
+  : listFilter.startsWith('st:') ? n.status===listFilter.slice(3)
+  : n.tags.includes(listFilter.slice(4));
 const resName=id=>(res(id)||{}).name||id;
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1800)}
 function fmt(n){ if(!Number.isFinite(n)) return String(n); const a=Math.abs(n);
@@ -330,11 +514,9 @@ function validate(){
   const ids=new Map();
   for(const n of P.nodes){ if(!n.id) add('e','ID가 비어 있는 노드가 있어요',null); ids.set(n.id,(ids.get(n.id)||0)+1); }
   for(const [id,c] of ids) if(c>1) add('e',`노드 ID "${id}"가 ${c}번 중복돼요`,id);
-  const rids=new Set(P.resources.map(r=>r.id)); const eids=new Set(P.eras.map(e=>e.id));
+  const rids=new Set(P.resources.map(r=>r.id));
   const consumed=new Set(), produced=new Set();
   for(const n of P.nodes){
-    if(n.era && !eids.has(n.era)) add('e',`없는 시대 "${n.era}"`,n.id);
-    if(!n.era) add('w','시대가 지정되지 않았어요',n.id);
     for(const c of n.cost){
       if(!rids.has(c.resource)) add('e',`비용에 없는 재화 "${c.resource}"`,n.id); else consumed.add(c.resource);
       if(c.base<=0) add('w',`${resName(c.resource)} 기본 비용이 0 이하`,n.id);
@@ -391,7 +573,7 @@ function layout(){
   const rowOf=new Map(), pos=new Map();
   cols.forEach((col,d)=>{ if(!col) return;
     const bary=n=>{ const ps=nodeDeps(n).filter(p=>rowOf.has(p)); return ps.length? ps.reduce((a,p)=>a+rowOf.get(p),0)/ps.length : 1e6; };
-    col.sort((a,b)=> eraIdx(a.era)-eraIdx(b.era) || bary(a)-bary(b) || a.name.localeCompare(b.name,'ko'));
+    col.sort((a,b)=> bary(a)-bary(b) || a.name.localeCompare(b.name,'ko'));
     col.forEach((n,i)=>{ rowOf.set(n.id,i); pos.set(n.id,{x:PADX+d*(NW+GX), y:PADY+i*(NH+GY)}); });
   });
   for(const n of P.nodes) if(n.pos) pos.set(n.id,{x:n.pos.x,y:n.pos.y}); // 수동 배치가 자동 정렬을 덮어씀
@@ -438,7 +620,7 @@ function nodesSVG(L,rel,errIds){
     const st = n.status==='done'?'✓ ':n.status==='wip'?'◐ ':'';
     s+=`<g class="${cls}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">
       <rect class="b" width="${NW}" height="${NH}" rx="8"/>
-      <rect width="5" height="${NH-12}" x="0" y="6" rx="2" fill="${esc(eraColor(n.era))}"/>
+      <rect width="5" height="${NH-12}" x="0" y="6" rx="2" fill="${esc(statusColor(n.status))}"/>
       <text x="14" y="21">${esc(st+clip(n.name,13))}<tspan class="s" dx="6">${esc(lv)}</tspan></text>
       <text class="s" x="14" y="36">${esc(clip(n.id,26))}</text>
       <text class="c" x="14" y="53">${esc(clip(costTxt+extra,24))}</text>
@@ -460,8 +642,8 @@ function renderGraph(issues){
   $('#nodes').innerHTML=nodesSVG(L,rel,errIds);
   $('#tmp').innerHTML='';
   applyView();
-  $('#legend').innerHTML = P.eras.map(e=>`<span><i style="background:${esc(e.color)}"></i>${esc(e.name)}</span>`).join('')
-    + `<span>── AND</span><span style="color:#b89cff">┄┄ OR</span><span>점선 테두리 = 아이디어</span><span>⌖ 수동 배치</span>`;
+  $('#legend').innerHTML = Object.entries(STATUS).map(([k,v])=>`<span><i style="background:${STATUS_COLOR[k]}"></i>${esc(v)}</span>`).join('')
+    + `<span>── AND</span><span style="color:#b89cff">┄┄ OR</span><span>⌖ 수동 배치</span>`;
   if(!fitted && P.nodes.length){ fitted=true; fit(); }
 }
 function clip(s,n){ s=String(s); let w=0,o=''; for(const ch of s){ w+= /[ㄱ-힝]/.test(ch)?1.7:1; if(w>n*1.15){ return o+'…'; } o+=ch; } return o; }
@@ -562,22 +744,27 @@ function renderLeft(issues){
   if(tab==='nodes'){
     const nodeIssue=new Map(); for(const i of issues) if(i.id){ const cur=nodeIssue.get(i.id); if(!cur||rank(i.lv)<rank(cur)) nodeIssue.set(i.id,i.lv); }
     const f=filter.trim().toLowerCase();
-    const list=P.nodes.filter(n=>(!eraFilter||n.era===eraFilter) && (!f || n.name.toLowerCase().includes(f)||n.id.includes(f)||n.description.toLowerCase().includes(f)))
-      .slice().sort((a,b)=>eraIdx(a.era)-eraIdx(b.era)||(lastLayout?.depth.get(a.id)??0)-(lastLayout?.depth.get(b.id)??0));
+    const list=P.nodes.filter(n=>matchFilter(n) &&
+        (!f || n.name.toLowerCase().includes(f)||n.id.includes(f)||n.description.toLowerCase().includes(f)||n.tags.some(t=>t.toLowerCase().includes(f))))
+      .slice().sort((a,b)=>((lastLayout?.depth.get(a.id)??0)-(lastLayout?.depth.get(b.id)??0))||a.name.localeCompare(b.name,'ko'));
     const keepFocus = document.activeElement && document.activeElement.id==='q';
     el.innerHTML=`<div class="pad" style="padding-bottom:8px">
         <div class="row"><input id="q" placeholder="이름·ID·설명 검색" value="${esc(filter)}"><button class="pri fx0" id="addNode">+ 노드</button></div>
-        <div class="hint" style="margin-top:0">Ctrl(⌘)+클릭으로 여러 개 선택 · 그래프에서 드래그로 위치 이동 · 노드 오른쪽 점을 끌어 연결</div>
-        <div class="row" style="margin-top:6px"><select id="eraF"><option value="">모든 시대 (${P.nodes.length})</option>${P.eras.map(e=>`<option value="${esc(e.id)}" ${eraFilter===e.id?'selected':''}>${esc(e.name)} (${P.nodes.filter(n=>n.era===e.id).length})</option>`).join('')}</select></div>
+        <div class="hint" style="margin-top:0">Ctrl(⌘)+클릭으로 여러 개 선택 · 그래프에서 드래그로 위치 이동 · 노드 오른쪽 점을 끌어 연결 · 검색은 태그도 찾아요</div>
+        <div class="row" style="margin-top:6px"><select id="stF">
+          <option value="">모든 노드 (${P.nodes.length})</option>
+          <optgroup label="상태">${Object.entries(STATUS).map(([k,v])=>`<option value="st:${k}" ${listFilter==='st:'+k?'selected':''}>${esc(v)} (${P.nodes.filter(n=>n.status===k).length})</option>`).join('')}</optgroup>
+          ${allTags().length?`<optgroup label="태그">${allTags().map(t=>`<option value="tag:${esc(t)}" ${listFilter==='tag:'+t?'selected':''}>${esc(t)} (${P.nodes.filter(n=>n.tags.includes(t)).length})</option>`).join('')}</optgroup>`:''}
+        </select></div>
       </div>
       <ul class="nlist">${list.map(n=>`<li data-id="${esc(n.id)}" class="${selSet.has(n.id)?'on':''}">
-        <span class="dot" style="background:${esc(eraColor(n.era))}"></span>
+        <span class="dot" style="background:${statusColor(n.status)}"></span>
         <span class="nm">${esc(n.name)} <span class="id">${esc(n.id)}</span></span>
         ${nodeIssue.has(n.id)?`<span class="flag" style="color:${lvColor(nodeIssue.get(n.id))}">●</span>`:''}
         <span class="muted" style="font-size:11px">${STATUS[n.status]}</span></li>`).join('') || '<div class="empty">노드가 없어요</div>'}</ul>`;
     const q=$('#q'); q.oninput=()=>{ filter=q.value; renderLeft(validate()); };
     if(keepFocus){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
-    $('#eraF').onchange=e=>{ eraFilter=e.target.value; renderLeft(validate()); };
+    $('#stF').onchange=e=>{ listFilter=e.target.value; renderLeft(validate()); };
     $('#addNode').onclick=addNode;
     el.querySelectorAll('.nlist li').forEach(li=>li.onclick=e=>{
       const add=e.ctrlKey||e.metaKey||e.shiftKey;
@@ -596,26 +783,13 @@ function renderLeft(issues){
     el.querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.resources.splice(+b.dataset.rdel,1); changed(true); renderAll(); }));
     $('#addRes').onclick=()=>{ let id='res',k=1; while(res(id+k)) k++; P.resources.push({id:id+k,name:'새 재화',manual:false,note:''}); changed(true); renderAll(); };
   }
-  if(tab==='eras'){
-    el.innerHTML=`<div class="pad"><div class="lbl">시대 / 레이어</div><div class="hint" style="margin-bottom:8px">순서가 그래프의 세로 정렬과 목록 순서에 쓰여요.</div>
-      <div class="lst">${P.eras.map((e,i)=>`<div class="row"><input type="color" class="fx0" data-ef="color" data-ei="${i}" value="${esc(e.color)}"><input class="mono" data-eid="${i}" value="${esc(e.id)}"><input data-ef="name" data-ei="${i}" value="${esc(e.name)}">
-        <button class="x fx0" data-eup="${i}" title="위로">↑</button><button class="x fx0" data-edel="${i}">✕</button></div>`).join('')}</div>
-      <button class="add" id="addEra">+ 시대 추가</button></div>`;
-    el.querySelectorAll('[data-ef]').forEach(inp=>inp.addEventListener('input',()=>{ P.eras[+inp.dataset.ei][inp.dataset.ef]=inp.value; changed(); }));
-    el.querySelectorAll('[data-eid]').forEach(inp=>inp.addEventListener('change',()=>{
-      const e=P.eras[+inp.dataset.eid], nv=slug(inp.value); if(!nv||(nv!==e.id&&era(nv))){ toast('비었거나 중복된 ID예요'); inp.value=e.id; return; }
-      for(const n of P.nodes) if(n.era===e.id) n.era=nv; e.id=nv; changed(true); renderAll(); }));
-    el.querySelectorAll('[data-eup]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.eup; if(i>0){ [P.eras[i-1],P.eras[i]]=[P.eras[i],P.eras[i-1]]; changed(true); renderAll(); } });
-    el.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.eras.splice(+b.dataset.edel,1); changed(true); renderAll(); }));
-    $('#addEra').onclick=()=>{ let k=P.eras.length+1; while(era('era'+k)) k++; P.eras.push({id:'era'+k,name:'새 시대',color:'#'+Math.floor(Math.random()*0xaaaaaa+0x444444).toString(16)}); changed(true); renderAll(); };
-  }
   if(tab==='proj'){
     el.innerHTML=`<div class="pad">
       <div class="lbl">프로젝트 이름</div><input id="pName" value="${esc(P.meta.name)}">
       <div class="lbl">게임 컨셉 (AI에게 함께 전달돼요)</div><textarea id="pConcept" style="min-height:160px">${esc(P.meta.concept)}</textarea>
       <div class="hint">장르·톤·핵심 루프·피하고 싶은 것 등을 적어두면 AI 제안 품질이 올라가요.</div>
       <div class="lbl" style="margin-top:18px">통계</div>
-      <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 시대 ${P.eras.length} · 최대 단계 ${lastLayout?lastLayout.cols:0}</div>
+      <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 최대 단계 ${lastLayout?lastLayout.cols:0} · 태그 ${new Set(P.nodes.flatMap(n=>n.tags)).size}</div>
       <div class="lbl" style="margin-top:18px">로컬 파일</div>
       <div class="muted" id="pFile"></div>
       <div class="row" style="margin-top:6px"><button id="pSave">${FS_OK?'파일에 저장 (Ctrl+S)':'JSON 다운로드'}</button><button id="pOpen">파일 열기</button></div>
@@ -623,9 +797,12 @@ function renderLeft(issues){
       <div class="hint">${FS_OK?'한 번 저장 위치를 고르면 이후 Ctrl+S로 같은 파일에 덮어써요. 게임 레포 안(예: Assets/Data/upgrades.json)을 고르면 바로 커밋할 수 있어요.':'이 브라우저는 파일 덮어쓰기를 지원하지 않아 다운로드로 저장돼요. (Chrome·Edge 권장)'}</div>
       <div class="lbl" style="margin-top:18px">도구</div>
       <div class="row"><button id="pCurve">비용 곡선 비교</button></div>
+      <div class="lbl" style="margin-top:18px">프로젝트 관리</div>
+      <div class="row"><button id="pkOpen">프로젝트 목록</button><button id="dupProj">이 프로젝트 복제</button></div>
+      <div class="hint">프로젝트마다 노드·재화·연결된 파일이 따로 저장돼요. 상단의 프로젝트 이름을 눌러도 목록이 열려요.</div>
       <div class="lbl" style="margin-top:18px">초기화</div>
-      <div class="row"><button id="newProj">빈 프로젝트</button><button id="sampleProj">샘플 불러오기</button></div>
-      <div class="hint">현재 작업은 실행 취소(Ctrl+Z)로 되돌릴 수 있어요. 중요한 데이터는 먼저 JSON으로 내보내 두세요.</div>
+      <div class="row"><button id="newProj">내용 비우기</button><button id="sampleProj">샘플 내용으로</button></div>
+      <div class="hint">이 프로젝트의 내용만 바꿔요. 실행 취소(Ctrl+Z)로 되돌릴 수 있어요.</div>
     </div>`;
     $('#pName').oninput=e=>{ P.meta.name=e.target.value; $('#projName').textContent=P.meta.name; changed(); };
     $('#pConcept').oninput=e=>{ P.meta.concept=e.target.value; changed(); };
@@ -636,6 +813,8 @@ function renderLeft(issues){
     $('#pOpen').onclick=()=>{ pendingHandle=null; FS_OK?openFilePicker():openImport(''); };
     $('#pCurve').onclick=()=>openCurve(selSet.size?[...selSet]:P.nodes.map(n=>n.id));
     const pa=$('#pAuto'); if(pa) pa.onchange=e=>setAutoSave(e.target.checked);
+    $('#pkOpen').onclick=openPicker;
+    $('#dupProj').onclick=()=>{ const id=duplicateProject(curId); if(id) openProject(id); };
   }
 }
 function renameRes(i,inp){
@@ -668,9 +847,9 @@ const selNodes=()=>[...selSet].map(node).filter(Boolean);
 function addNode(){
   const base = sel?node(sel):null;
   const id=uniqueId('new_node');
-  const n={id,name:'새 업그레이드',era:base?base.era:(eraFilter||P.eras[0]?.id||''),status:'idea',maxLevel:1,
+  const n={id,name:'새 업그레이드',status:'idea',maxLevel:1,
     cost:P.resources[0]?[{resource:P.resources[0].id,base:10,growth:1}]:[],
-    requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:[],pos:null};
+    requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:base?base.tags.slice():(listFilter.startsWith('tag:')?[listFilter.slice(4)]:[]),pos:null};
   if(base&&base.pos) n.pos={x:base.pos.x+NW+GX,y:base.pos.y};
   P.nodes.push(n); sel=id; selSet=new Set([id]); changed(true); renderAll(); centerOn(id);
   setTimeout(()=>{ const f=document.querySelector('#right [data-p="name"]'); if(f){ f.focus(); f.select(); } },0);
@@ -700,8 +879,7 @@ function renderRight(){
       <button class="ghost" id="dupNode" title="복제">⧉ 복제</button><button class="ghost danger" id="delNode">삭제</button></h3>
     <div class="row"><div><div class="lbl">이름</div><input data-p="name" value="${esc(n.name)}"></div>
       <div><div class="lbl">ID</div><input class="mono" id="nodeId" value="${esc(n.id)}"></div></div>
-    <div class="row"><div><div class="lbl">시대</div><select data-p="era">${P.eras.map(e=>`<option value="${esc(e.id)}" ${e.id===n.era?'selected':''}>${esc(e.name)}</option>`).join('')}${era(n.era)?'':`<option value="${esc(n.era)}" selected>⚠ ${esc(n.era||'(없음)')}</option>`}</select></div>
-      <div><div class="lbl">상태</div><select data-p="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===n.status?'selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="row"><div><div class="lbl">상태</div><select data-p="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===n.status?'selected':''}>${v}</option>`).join('')}</select></div>
       <div style="flex:0 0 74px"><div class="lbl">최대 Lv</div><input type="number" min="1" data-p="maxLevel" data-t="num" value="${n.maxLevel}"></div></div>
     <div class="row" style="margin-top:8px"><div class="hint" style="margin:0">${n.pos?`⌖ 수동 배치 (${n.pos.x}, ${n.pos.y})`:'위치: 자동 정렬'}</div>
       ${n.pos?'<button class="ghost fx0" id="unpinNode" title="자동 정렬 위치로 되돌리기">자동 정렬로</button>':''}</div>
@@ -778,17 +956,15 @@ function renderRight(){
 function renderBulk(el){
   const ns=selNodes(); const ids=ns.map(n=>n.id);
   const others=P.nodes.filter(m=>!selSet.has(m.id));
-  const eraCnt=P.eras.map(e=>`${e.name} ${ns.filter(n=>n.era===e.id).length}`).filter(t=>!/ 0$/.test(t)).join(' · ');
+  const stCnt=Object.entries(STATUS).map(([k,v])=>`${v} ${ns.filter(n=>n.status===k).length}`).filter(t=>!/ 0$/.test(t)).join(' · ');
   el.innerHTML=`
   <div class="sec">
     <h3>여러 노드 선택됨 <small>${ids.length}개</small><span class="sp"></span><button class="ghost" id="bClear">선택 해제</button></h3>
     <div class="chips">${ns.map(n=>`<span class="chip" data-go="${esc(n.id)}">${esc(n.name)}</span>`).join('')}</div>
-    <div class="hint">${esc(eraCnt||'시대 없음')} · Ctrl(⌘)+클릭으로 더하거나 빼요. 그래프에서 끌면 함께 움직여요.</div>
+    <div class="hint">${esc(stCnt)} · Ctrl(⌘)+클릭으로 더하거나 빼요. 그래프에서 끌면 함께 움직여요.</div>
   </div>
   <div class="sec">
     <h3>일괄 변경</h3>
-    <div class="lbl">시대</div>
-    <div class="row"><select id="bEra">${P.eras.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select><button class="fx0" id="bEraGo">적용</button></div>
     <div class="lbl">상태</div>
     <div class="row"><select id="bSt">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button class="fx0" id="bStGo">적용</button></div>
     <div class="lbl">태그</div>
@@ -809,7 +985,6 @@ function renderBulk(el){
   const each=fn=>{ selNodes().forEach(fn); changed(true); renderAll(); };
   el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ select(c.dataset.go); centerOn(c.dataset.go); });
   $('#bClear').onclick=()=>select(null);
-  $('#bEraGo').onclick=()=>{ const v=$('#bEra').value; each(n=>n.era=v); toast(`시대를 ${era(v)?.name||v}(으)로 바꿨어요`); };
   $('#bStGo').onclick=()=>{ const v=$('#bSt').value; each(n=>n.status=v); toast(`상태를 ${STATUS[v]}(으)로 바꿨어요`); };
   $('#bTagAdd').onclick=()=>{ const t=$('#bTag').value.trim(); if(!t) return; each(n=>{ if(!n.tags.includes(t)) n.tags.push(t); }); toast(`태그 "${t}" 추가`); };
   $('#bTagDel').onclick=()=>{ const t=$('#bTag').value.trim(); if(!t) return; each(n=>{ n.tags=n.tags.filter(x=>x!==t); }); toast(`태그 "${t}" 제거`); };
@@ -935,7 +1110,7 @@ async function saveFileAs(){
   try{
     const h=await window.showSaveFilePicker({suggestedName:name,
       types:[{description:'업그레이드 트리 JSON',accept:{'application/json':['.json']}}]});
-    await writeTo(h,j); fileHandle=h; idbSet('handle',h);
+    await writeTo(h,j); fileHandle=h; idbSet('handle.'+curId,h);
     dirty=false; renderFile(); toast('저장했어요 — '+h.name); return true;
   }catch(e){ if(e.name!=='AbortError') toast('저장 실패: '+e.message); return false; }
 }
@@ -950,9 +1125,9 @@ async function openFilePicker(){
   }catch(e){ if(e.name!=='AbortError') toast('열기 실패: '+e.message); }
 }
 function linkHandle(h,keepDirty){
-  if(!h) return; fileHandle=h; idbSet('handle',h); dirty=!!keepDirty; renderFile();
+  if(!h) return; fileHandle=h; idbSet('handle.'+curId,h); dirty=!!keepDirty; renderFile(); touchMeta();
 }
-function detachFile(){ fileHandle=null; idbSet('handle',null); dirty=false; renderFile(); toast('파일 연결을 끊었어요'); }
+function detachFile(){ fileHandle=null; idbSet('handle.'+curId,null); dirty=false; renderFile(); touchMeta(); toast('파일 연결을 끊었어요'); }
 function renderFile(){
   const el=$('#fileChip'), btn=$('#saveBtn'); if(!el) return;
   if(fileHandle){
@@ -979,11 +1154,7 @@ function openFileMenu(){
 }
 function setAutoSave(v){ autoSave=!!v; localStorage.setItem(AUTO_KEY,autoSave?'1':'0'); renderFile();
   if(autoSave&&fileHandle&&dirty) queueAutoSave(); }
-(async()=>{ if(!FS_OK) { renderFile(); return; }
-  const h=await idbGet('handle');
-  if(h){ fileHandle=h; renderFile(); if(!await hasPerm(h,false)) $('#fileChip').title='저장할 때 파일 권한을 다시 허용해야 해요 — '+h.name; }
-  else renderFile();
-})();
+
 
 $('#exportBtn').onclick=()=>{
   const j=exportJSON();
@@ -1008,10 +1179,9 @@ ${P.meta.concept||'(작성되지 않음)'}
 
 ## 데이터 스키마 (${SCHEMA})
 - \`resources[]\`: { id, name, manual(노드 없이 직접 얻는 재화인지), note }
-- \`eras[]\`: { id, name, color } — 배열 순서가 진행 순서
 - \`nodes[]\`: 업그레이드 노드
   - \`id\`: snake_case 영문, 고유. 다른 노드가 이 값으로 참조함
-  - \`name\`, \`era\`(eras.id), \`status\`: idea | wip | done | cut
+  - \`name\`, \`status\`: idea | wip | done | cut
   - \`maxLevel\`: 1이면 1회성, 2 이상이면 반복 구매
   - \`cost[]\`: { resource, base, growth } — 레벨 n 가격 = ceil(base × growth^(n−1))
   - \`requires.all[]\`: 모두 충족해야 함 (AND) / \`requires.any[]\`: 하나 이상 충족 (OR, 비어 있으면 무시)
@@ -1022,12 +1192,12 @@ ${P.meta.concept||'(작성되지 않음)'}
     - perLevel: true면 레벨마다 효과가 누적
   - \`description\`: 플레이어에게 보이는 문장. \`{value1}\`, \`{value2}\`…는 effects[0], effects[1]…의 value, \`{maxLevel}\`도 가능
   - \`designNote\`: 디자이너의 의도 메모 (게임에 노출되지 않음)
-  - \`tags[]\`
+  - \`tags[]\`: 자유 분류용 문자열 배열. 묶음(예: 전투/생산, 챕터)이 필요하면 태그를 쓴다 — 시대/레이어 같은 고정 계층은 없다
   - \`pos\`: 에디터에서 수동 배치한 좌표 { x, y } 또는 null (자동 정렬). **값을 그대로 유지해 주세요.**
 
 ## 현재 상태 요약
 - 재화 ${P.resources.length}개: ${P.resources.map(r=>`${r.name}(${r.id})`).join(', ')}
-- 시대: ${P.eras.map(e=>`${e.name}(${e.id}) ${P.nodes.filter(n=>n.era===e.id).length}개`).join(' → ')}
+- 태그: ${[...new Set(P.nodes.flatMap(n=>n.tags))].join(', ')||'(없음)'}
 - 노드 ${P.nodes.length}개, 의존 깊이 ${L.cols}단계
 - 검증: ${issues.length?issues.filter(i=>i.lv!=='i').map(i=>`[${i.lv==='e'?'오류':'경고'}] ${i.id?i.id+': ':''}${i.msg}`).join(' / ')||'오류·경고 없음':'문제 없음'}
 
@@ -1050,13 +1220,13 @@ ${request||'(여기에 요청을 적어주세요)'}
 $('#aiBtn').onclick=()=>{
   openModal('AI에게 넘기기',`
     <div class="lbl">요청 (선택)</div>
-    <textarea id="aiReq" placeholder="예: 고대 시대 노드를 12개 추가해줘. 청동기·문자·교역 축으로, 첫 고대 노드는 30분 안에 살 수 있게."></textarea>
+    <textarea id="aiReq" placeholder="예: 노드를 12개 더 추가해줘. 청동기·문자·교역 축으로, 첫 노드는 30분 안에 살 수 있게."></textarea>
     <div class="row" style="margin:6px 0 0;flex-wrap:wrap;gap:5px" id="aiPresets"></div>
     <div class="lbl" style="margin-top:12px">전달할 내용 (컨셉 + 스키마 설명 + 현재 JSON + 응답 규칙)</div>
     <textarea class="big" id="aiOut" readonly></textarea>
     <div class="hint">AI의 응답을 통째로 복사해서 <b>불러오기</b>에 붙여넣으면, 바뀐 점을 확인한 뒤 적용할 수 있어요.</div>`,
     [['닫기',closeModal],['복사',b=>copyText($('#aiOut').value,b),'pri']]);
-  const presets=['이 트리의 밸런스와 진행 속도를 검토해줘','막다른 노드와 지루한 구간을 찾아 개선안을 줘','다음 시대 노드 10개를 제안해줘','모든 노드 설명을 코믹한 톤으로 다듬어줘'];
+  const presets=['이 트리의 밸런스와 진행 속도를 검토해줘','막다른 노드와 지루한 구간을 찾아 개선안을 줘','이어지는 노드 10개를 제안해줘','모든 노드 설명을 코믹한 톤으로 다듬어줘'];
   $('#aiPresets').innerHTML=presets.map(p=>`<span class="chip">${esc(p)}</span>`).join('');
   const upd=()=>$('#aiOut').value=aiMarkdown($('#aiReq').value.trim()); upd();
   $('#aiReq').oninput=upd;
@@ -1075,22 +1245,19 @@ function openCurve(ids){
   const best=[...cnt.entries()].sort((a,b)=>b[1]-a[1])[0][0];
   if(!cnt.has(curve.res) || !cnt.get(curve.res)) curve.res=best;
   curve.scope='sel';
-  const eraOf=node(list[0]).era;
   openModal('비용 곡선 비교',`
     <div class="row">
       <div><div class="lbl">재화</div><select id="cRes">${[...cnt.keys()].map(r=>`<option value="${esc(r)}" ${r===curve.res?'selected':''}>${esc(resName(r))}</option>`).join('')}</select></div>
       <div><div class="lbl">세로축</div><select id="cMode"><option value="level">레벨별 가격</option><option value="sum" ${curve.mode==='sum'?'selected':''}>Lv1부터 누적 합계</option></select></div>
       <div><div class="lbl">눈금</div><select id="cLog"><option value="1" ${curve.log?'selected':''}>로그</option><option value="0" ${curve.log?'':'selected'}>선형</option></select></div>
-      <div><div class="lbl">대상</div><select id="cScope"><option value="sel">선택한 ${list.length}개</option><option value="era">${esc(era(eraOf)?.name||'같은 시대')} 전체</option><option value="all">모든 노드</option></select></div>
+      <div><div class="lbl">대상</div><select id="cScope"><option value="sel">선택한 ${list.length}개</option><option value="all">모든 노드</option></select></div>
     </div>
     <div id="cBox" style="margin-top:12px"></div>
     <div class="hint">반복 구매 노드(최대 Lv 2 이상)의 가격이 레벨에 따라 어떻게 오르는지 비교해요. 선이 너무 가파르면 후반이 지루해지고, 너무 완만하면 금방 끝나요.</div>`,
     [['닫기',closeModal]]);
   const draw=()=>{
     curve.res=$('#cRes').value; curve.mode=$('#cMode').value; curve.log=$('#cLog').value==='1'; curve.scope=$('#cScope').value;
-    const base = curve.scope==='sel' ? list
-      : curve.scope==='era' ? P.nodes.filter(n=>n.era===eraOf).map(n=>n.id)
-      : P.nodes.map(n=>n.id);
+    const base = curve.scope==='sel' ? list : P.nodes.map(n=>n.id);
     $('#cBox').innerHTML=curveSVG(base,curve);
   };
   ['#cRes','#cMode','#cLog','#cScope'].forEach(q=>$(q).onchange=draw);
@@ -1151,7 +1318,7 @@ function diff(a,b){
       const fields=Object.keys({...x,...y}).filter(k=>JSON.stringify(x[k])!==JSON.stringify(y[k]));
       if(fields.length) out.push(['c',coll,x.id,nameOf(x)+' — '+fields.join(', '),label,i]); });
   };
-  cmp('resources','재화',x=>x.name); cmp('eras','시대',x=>x.name); cmp('nodes','노드',x=>x.name);
+  cmp('resources','재화',x=>x.name); cmp('nodes','노드',x=>x.name);
   if(a.meta.name!==b.meta.name||a.meta.concept!==b.meta.concept) out.push(['c','meta','meta','이름/컨셉','프로젝트',-1]);
   return out;
 }
@@ -1179,7 +1346,7 @@ function checkImport(){
     if(!np.nodes.length && !np.resources.length) throw new Error('노드나 재화가 없는 데이터예요');
     const d=diff(normalize(P),np); pendingImport=np; pendingDiff=d;
     const sym={a:'+',r:'−',c:'~'};
-    box.innerHTML=`<div class="row"><div class="lbl" style="margin:0">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(불러올 데이터: 노드 ${np.nodes.length} · 재화 ${np.resources.length} · 시대 ${np.eras.length})</span></div>
+    box.innerHTML=`<div class="row"><div class="lbl" style="margin:0">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(불러올 데이터: 노드 ${np.nodes.length} · 재화 ${np.resources.length})</span></div>
         ${d.length?`<label class="fx0" style="display:flex;gap:6px;align-items:center;color:var(--tx2)"><input type="checkbox" id="dAll" checked style="width:auto">전체 선택</label>`:''}</div>
       <div class="diff">${d.map(([k,coll,id,info,label],i)=>`<label class="${k}"><input type="checkbox" class="dchk" data-i="${i}" checked>
         <span>${sym[k]} [${esc(label)}] ${esc(id)} ${esc(info)}</span></label>`).join('')||'<span class="muted">현재와 동일해요</span>'}</div>
@@ -1227,16 +1394,29 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); e.shiftKey?saveFileAs():saveFile(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!typing){ e.preventDefault(); e.shiftKey?redo():undo(); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'&&!typing){ e.preventDefault(); redo(); }
-  if(e.key==='Escape'){ if($('#modal').classList.contains('on')) closeModal(); else if(!typing) select(null); }
+  if(e.key==='Escape'){
+    if($('#picker').classList.contains('on')) closePicker();
+    else if($('#modal').classList.contains('on')) closeModal();
+    else if(!typing) select(null); }
   if(!typing && (e.key==='n'||e.key==='N') && !e.ctrlKey && !e.metaKey){ e.preventDefault(); addNode(); }
   if(!typing && e.key==='f' && !e.ctrlKey && !e.metaKey) fit();
   if(!typing && (e.key==='a'||e.key==='A') && (e.ctrlKey||e.metaKey)){ e.preventDefault();
-    selSet=new Set(P.nodes.filter(n=>!eraFilter||n.era===eraFilter).map(n=>n.id)); sel=[...selSet].pop()||null; renderAll(); }
+    selSet=new Set(P.nodes.filter(matchFilter).map(n=>n.id)); sel=[...selSet].pop()||null; renderAll(); }
 });
 window.addEventListener('beforeunload',e=>{ if(dirty&&fileHandle&&!autoSave){ e.preventDefault(); e.returnValue=''; } });
 window.addEventListener('resize',()=>applyView());
 
-load(); snapshot(); renderAll();
+function boot(){
+  wirePicker();
+  migrateOld();
+  const l=listProjects().slice().sort((a,b)=>(b.updated||0)-(a.updated||0));
+  const last=localStorage.getItem(LAST_KEY);
+  const pick=l.find(x=>x.id===last)||l[0];
+  if(pick) loadProject(pick.id);
+  else { P=normalize(blankProject()); curId=null; renderAll(); snapshot(); }
+  openPicker();
+}
+boot();
 </script>
 </body>
 </html>
