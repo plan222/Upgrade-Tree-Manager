@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+._*
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+
+# 혹시 모를 도구 부산물 (이 레포는 빌드가 없다)
+node_modules/
+*.log

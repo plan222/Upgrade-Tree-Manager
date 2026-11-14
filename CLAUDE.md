@@ -21,15 +21,19 @@ README.md / PRD.md / CLAUDE.md
 | 데이터 | `SCHEMA`, `sample()`, `normalize()` — 스키마의 기준 |
 | 상태 / 저장 / 실행취소 | 전역 `P`(프로젝트), `sel`, localStorage, 히스토리 |
 | 검증 | `validate()` → `{lv:'e'|'w'|'i', msg, id}` 배열 |
-| 레이아웃 | `layout()` — 의존 깊이 = x, 시대 순서 + 부모 무게중심 = y |
-| 그래프 렌더 | `renderGraph()`, 팬/줌 |
-| 왼쪽 / 오른쪽 패널 | 목록·재화·시대·프로젝트 탭 / 노드 편집 |
-| 모달 | 내보내기, AI 마크다운(`aiMarkdown()`), 불러오기 + `diff()` |
+| 레이아웃 | `layout()` — 의존 깊이 = x, 시대 순서 + 부모 무게중심 = y. 노드에 `pos`가 있으면 그 값이 자동 위치를 덮어씀 |
+| 그래프 렌더 | `colsSVG()`/`edgesSVG()`/`nodesSVG()` → `#cols`/`#edges`/`#nodes` 그룹에 각각 그림. `renderGraph()`가 전체, 드래그 중에는 `edgesSVG()`만 다시 그림 |
+| 그래프 상호작용 | `graphEvents()` — 빈 곳 드래그 = 팬, 노드 드래그 = `pos` 고정, 포트(`.port`) 드래그 = `addDep()`로 의존성 연결 |
+| 왼쪽 / 오른쪽 패널 | 목록·재화·시대·프로젝트 탭 / 노드 편집(`renderRight()`) · 다중 선택 일괄 편집(`renderBulk()`) |
+| 비용 곡선 | `openCurve()` / `curveSVG()` — 인라인 SVG 선 그래프 |
+| 로컬 파일 | File System Access API. `saveFile()`/`saveFileAs()`/`openFilePicker()`, 핸들은 IndexedDB(`idbSet/idbGet`)에 보관, 상태 표시는 `renderFile()` |
+| 모달 | 내보내기, AI 마크다운(`aiMarkdown()`), 불러오기 + `diff()` + `mergePick()`(선택 적용) |
 
 ## 작업 규칙
 
 - **외부 의존성·빌드 도구 추가 금지.** 파일 하나를 브라우저로 열면 동작해야 한다. 꼭 필요하면 CDN 스크립트 1개까지만, 먼저 제안할 것.
-- 데이터 변경 후에는 `changed()`를 호출한다 (저장 + 재렌더 + 실행취소 스냅샷). 구조가 바뀌면 `changed(true)` 후 `renderAll()`.
+- 데이터 변경 후에는 `changed()`를 호출한다 (localStorage 저장 + 파일 dirty 표시 + 재렌더 + 실행취소 스냅샷). 구조가 바뀌면 `changed(true)` 후 `renderAll()`.
+- 선택 상태는 `sel`(주 선택) + `selSet`(다중 선택) 두 개다. 직접 건드리지 말고 `select(id, additive)`를 쓰고, 노드가 사라질 수 있는 작업 뒤에는 `pruneSel()`을 호출한다.
 - 오른쪽 편집 패널의 입력은 `data-p="경로"` + `data-t="num|bool|numOrStr|tags"`로 자동 바인딩된다. 새 필드도 이 방식을 따른다.
 - 입력 중 포커스가 날아가지 않도록, 타이핑 이벤트에서는 편집 패널 전체를 다시 그리지 않는다 (`renderDerived()`만).
 - UI 문구는 한국어.
@@ -59,7 +63,8 @@ README.md / PRD.md / CLAUDE.md
     // type: produce | multiply | add | unlock | custom
     "description": "나무 생산량 ×{value1}",  // {valueN} = effects[N-1].value, {maxLevel}
     "designNote": "",
-    "tags": []
+    "tags": [],
+    "pos": null                     // 수동 배치 좌표 {x,y} 또는 null(자동 정렬)
   }]
 }
 ```
@@ -76,6 +81,6 @@ README.md / PRD.md / CLAUDE.md
 
 1. 위 스키마 그대로 **전체 JSON**을 ```json 코드블록 하나로 반환
 2. 기존 노드 `id`는 바꾸지 않음
-3. 수치는 `effects`에 구조화하고 `description`은 `{value1}` 템플릿 사용
+3. 수치는 `effects`에 구조화하고 `description`은 `{value1}` 템플릿 사용. 기존 `pos` 값은 그대로 두고, 새 노드는 `pos: null`
 4. 새로 추가하거나 크게 바꾼 노드는 `designNote`에 의도 기록
 5. JSON 뒤에 변경 요약

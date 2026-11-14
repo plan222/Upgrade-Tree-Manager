@@ -102,6 +102,25 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
 .edge.dim{opacity:.1}
 .colhdr{fill:var(--tx3);font-size:11px;font-family:var(--mono)}
 .empty{padding:40px 20px;text-align:center;color:var(--tx3)}
+/* 그래프 상호작용 */
+.gnode{cursor:grab}
+.gnode .port{fill:#1f232c;stroke:var(--acc);stroke-width:1.5;opacity:0;cursor:crosshair}
+.gnode:hover .port{opacity:1}
+.gnode .port:hover{fill:var(--acc)}
+.gnode.linkable rect.b{stroke:var(--acc2);stroke-dasharray:4 3}
+.gnode .pin{fill:var(--acc2);font-size:11px}
+#tmp path{fill:none;stroke:var(--acc);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
+/* 파일 */
+#fileChip{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--tx2);white-space:nowrap}
+#fileChip b{color:var(--tx);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+#fileChip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 7px}
+#fileChip.dirty .dot{background:var(--warn)}
+#fileChip.none .dot{background:var(--tx3)}
+/* 차트 */
+.chart{width:100%;height:320px;display:block;background:#11131a;border:1px solid var(--line);border-radius:8px}
+.chart .gl{stroke:#262a33;stroke-width:1}
+.chart .ax{fill:var(--tx3);font-size:10px;font-family:var(--mono)}
+.chart path.ln{fill:none;stroke-width:2;stroke-linejoin:round}
 /* modal */
 #modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
 #modal.on{display:flex}
@@ -115,6 +134,9 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
 .vitem:hover{background:var(--panel2)}
 .diff{font-family:var(--mono);font-size:12px}
 .diff .a{color:var(--ok)} .diff .r{color:var(--err)} .diff .c{color:var(--warn)}
+.diff label{display:flex;gap:7px;align-items:flex-start;padding:2px 0;cursor:pointer}
+.diff label:hover{background:var(--panel2)}
+.diff input[type=checkbox]{flex:0 0 auto;margin-top:3px}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2b303b;border:1px solid var(--line2);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
 #toast.on{opacity:1}
 .confirm{color:var(--err);border-color:var(--err)}
@@ -129,8 +151,10 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
     <button class="ghost" id="redoBtn" title="다시 실행 (Ctrl+Shift+Z)">↷</button>
     <div class="sp"></div>
     <div id="vbadge" title="검증 결과 보기" style="cursor:pointer"></div>
+    <div id="fileChip" class="none" title="연결된 로컬 JSON 파일"></div>
+    <button id="saveBtn" title="로컬 파일로 저장 (Ctrl+S)">파일로 저장</button>
     <button id="importBtn">불러오기</button>
-    <button id="exportBtn">JSON 내보내기</button>
+    <button id="exportBtn">내보내기</button>
     <button class="pri" id="aiBtn">AI에게 넘기기</button>
   </div>
   <div id="main">
@@ -148,7 +172,7 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
         <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#566076"/></marker>
         <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c6fd6"/></marker>
         <marker id="arH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2a541"/></marker>
-      </defs><g id="vp"></g></svg>
+      </defs><g id="vp"><g id="cols"></g><g id="edges"></g><g id="nodes"></g><g id="tmp"></g></g></svg>
       <div id="legend"></div>
       <div id="gtools">
         <button id="zoomOut">−</button><button id="zoomIn">+</button><button id="fitBtn">전체 보기</button>
@@ -233,7 +257,8 @@ function normalize(p){
       cost:(n.cost||[]).map(c=>({resource:String(c.resource??''),base:num(c.base),growth:c.growth==null?1:num(c.growth)})),
       requires:{all:(req.all||[]).map(normCond),any:(req.any||[]).map(normCond)},
       effects:(n.effects||[]).map(e=>({type:EFFECT_TYPES[e.type]?e.type:'custom',target:String(e.target??''),value:e.value??0,perLevel:!!e.perLevel})),
-      description:String(n.description??''), designNote:String(n.designNote??''), tags:Array.isArray(n.tags)?n.tags.map(String):[]
+      description:String(n.description??''), designNote:String(n.designNote??''), tags:Array.isArray(n.tags)?n.tags.map(String):[],
+      pos: n.pos && Number.isFinite(+n.pos.x) && Number.isFinite(+n.pos.y) ? {x:Math.round(+n.pos.x),y:Math.round(+n.pos.y)} : null
     });
   }
   return out;
@@ -249,11 +274,11 @@ function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
 function condType(c){return 'node' in c?'node':'resource' in c?'resource':'custom'}
 
 /* ================= 상태 / 저장 / 실행취소 ================= */
-let P, sel=null, tab='nodes', filter='', eraFilter='', view={x:0,y:0,k:1}, fitted=false;
+let P, sel=null, selSet=new Set(), tab='nodes', filter='', eraFilter='', view={x:0,y:0,k:1}, fitted=false;
 let hist=[], hpos=-1, commitTimer=null;
 function load(){
   try{ const s=localStorage.getItem(STORE_KEY); if(s){ P=normalize(JSON.parse(s)); return; } }catch(e){}
-  P=sample();
+  P=normalize(sample());
 }
 function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(P)); }catch(e){} }
 function snapshot(){
@@ -262,13 +287,14 @@ function snapshot(){
   hist=hist.slice(0,hpos+1); hist.push(s); if(hist.length>200) hist.shift(); hpos=hist.length-1; updUndo();
 }
 function changed(immediate){ // 데이터가 바뀔 때마다 호출
-  persist(); scheduleRender();
+  persist(); markDirty(); scheduleRender();
   clearTimeout(commitTimer);
   if(immediate) snapshot(); else commitTimer=setTimeout(snapshot,500);
 }
 function undo(){ if(hpos>0){ hpos--; P=normalize(JSON.parse(hist[hpos])); afterRestore(); } }
 function redo(){ if(hpos<hist.length-1){ hpos++; P=normalize(JSON.parse(hist[hpos])); afterRestore(); } }
-function afterRestore(){ if(sel&&!node(sel)) sel=null; persist(); renderAll(); updUndo(); }
+function afterRestore(){ pruneSel(); persist(); renderAll(); updUndo(); }
+function pruneSel(){ selSet=new Set([...selSet].filter(i=>node(i))); if(sel&&!node(sel)) sel=null; if(!sel&&selSet.size) sel=[...selSet].pop(); }
 function updUndo(){ $('#undoBtn').disabled=hpos<=0; $('#redoBtn').disabled=hpos>=hist.length-1; }
 
 /* ================= 유틸 ================= */
@@ -368,6 +394,7 @@ function layout(){
     col.sort((a,b)=> eraIdx(a.era)-eraIdx(b.era) || bary(a)-bary(b) || a.name.localeCompare(b.name,'ko'));
     col.forEach((n,i)=>{ rowOf.set(n.id,i); pos.set(n.id,{x:PADX+d*(NW+GX), y:PADY+i*(NH+GY)}); });
   });
+  for(const n of P.nodes) if(n.pos) pos.set(n.id,{x:n.pos.x,y:n.pos.y}); // 수동 배치가 자동 정렬을 덮어씀
   return {pos,depth,cols:cols.length};
 }
 
@@ -379,14 +406,13 @@ function related(id){
   const goDn=i=>{ for(const c of children.get(i)||[]) if(!down.has(c)){ down.add(c); goDn(c); } };
   goUp(id); goDn(id); return new Set([id,...up,...down]);
 }
-let lastLayout=null;
-function renderGraph(issues){
-  const L=layout(); lastLayout=L;
-  const errIds=new Set(issues.filter(i=>i.lv==='e'&&i.id).map(i=>i.id));
-  const rel = sel&&node(sel) ? related(sel) : null;
+let lastLayout=null, lastIssues=[];
+function ancestors(id){ const out=new Set();
+  const go=i=>{ const n=node(i); if(!n) return; for(const d of nodeDeps(n)) if(!out.has(d)){ out.add(d); go(d); } };
+  go(id); return out; }
+function colsSVG(L){ let s=''; for(let d=0; d<L.cols; d++) s+=`<text class="colhdr" x="${PADX+d*(NW+GX)}" y="${PADY-14}">단계 ${d}</text>`; return s; }
+function edgesSVG(L,rel){
   let s='';
-  for(let d=0; d<L.cols; d++) s+=`<text class="colhdr" x="${PADX+d*(NW+GX)}" y="${PADY-14}">단계 ${d}</text>`;
-  // edges
   for(const n of P.nodes){ const b=L.pos.get(n.id); if(!b) continue;
     for(const [kind,list] of [['all',n.requires.all],['any',n.requires.any]]) for(const c of list){
       if(!('node' in c)) continue; const a=L.pos.get(c.node); if(!a||c.node===n.id) continue;
@@ -400,9 +426,12 @@ function renderGraph(issues){
       if(c.minLevel>1) s+=`<text class="colhdr" x="${(x1+x2)/2}" y="${(y1+y2)/2-4}" text-anchor="middle" ${rel&&!hl?'opacity=".1"':''}>Lv${c.minLevel}</text>`;
     }
   }
-  // nodes
+  return s;
+}
+function nodesSVG(L,rel,errIds){
+  let s='';
   for(const n of P.nodes){ const p=L.pos.get(n.id); if(!p) continue;
-    const cls=['gnode', n.id===sel?'sel':'', errIds.has(n.id)?'err':'', n.status, rel&&!rel.has(n.id)?'dim':''].join(' ');
+    const cls=['gnode', selSet.has(n.id)?'sel':'', errIds.has(n.id)?'err':'', n.status, rel&&!rel.has(n.id)?'dim':''].join(' ');
     const costTxt = n.cost.map(c=>`${resName(c.resource)} ${fmt(c.base)}`).join(' · ') || '무료';
     const extra = [...n.requires.all,...n.requires.any].some(c=>!('node' in c)) ? ' · +조건' : '';
     const lv = n.maxLevel>1?` ×${n.maxLevel}`:'';
@@ -410,39 +439,114 @@ function renderGraph(issues){
     s+=`<g class="${cls}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">
       <rect class="b" width="${NW}" height="${NH}" rx="8"/>
       <rect width="5" height="${NH-12}" x="0" y="6" rx="2" fill="${esc(eraColor(n.era))}"/>
-      <text x="14" y="21">${esc(st+clip(n.name,14))}<tspan class="s" dx="6">${esc(lv)}</tspan></text>
+      <text x="14" y="21">${esc(st+clip(n.name,13))}<tspan class="s" dx="6">${esc(lv)}</tspan></text>
       <text class="s" x="14" y="36">${esc(clip(n.id,26))}</text>
       <text class="c" x="14" y="53">${esc(clip(costTxt+extra,24))}</text>
+      ${n.pos?`<text class="pin" x="${NW-10}" y="17" text-anchor="middle">⌖</text>`:''}
+      <circle class="port" cx="${NW}" cy="${NH/2}" r="6"><title>드래그해서 다음 노드에 연결</title></circle>
       <title>${esc(n.name)}\n${esc(describe(n))}</title>
     </g>`;
   }
-  $('#vp').innerHTML=s;
+  return s;
+}
+function currentRel(){ return selSet.size===1 && sel && node(sel) ? related(sel) : null; }
+function renderGraph(issues){
+  lastIssues=issues;
+  const L=layout(); lastLayout=L;
+  const errIds=new Set(issues.filter(i=>i.lv==='e'&&i.id).map(i=>i.id));
+  const rel=currentRel();
+  $('#cols').innerHTML=colsSVG(L);
+  $('#edges').innerHTML=edgesSVG(L,rel);
+  $('#nodes').innerHTML=nodesSVG(L,rel,errIds);
+  $('#tmp').innerHTML='';
   applyView();
   $('#legend').innerHTML = P.eras.map(e=>`<span><i style="background:${esc(e.color)}"></i>${esc(e.name)}</span>`).join('')
-    + `<span>── AND</span><span style="color:#b89cff">┄┄ OR</span><span>점선 테두리 = 아이디어</span>`;
+    + `<span>── AND</span><span style="color:#b89cff">┄┄ OR</span><span>점선 테두리 = 아이디어</span><span>⌖ 수동 배치</span>`;
   if(!fitted && P.nodes.length){ fitted=true; fit(); }
 }
 function clip(s,n){ s=String(s); let w=0,o=''; for(const ch of s){ w+= /[ㄱ-힝]/.test(ch)?1.7:1; if(w>n*1.15){ return o+'…'; } o+=ch; } return o; }
 function applyView(){ $('#vp').setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.k})`); }
+function bounds(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const p of lastLayout.pos.values()){ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x+NW); y1=Math.max(y1,p.y+NH); }
+  return {x0:x0-PADX, y0:y0-PADY, x1:x1+PADX, y1:y1+PADY};
+}
 function fit(){
   if(!lastLayout||!P.nodes.length) return;
-  let maxX=0,maxY=0; for(const p of lastLayout.pos.values()){ maxX=Math.max(maxX,p.x+NW); maxY=Math.max(maxY,p.y+NH); }
-  const r=$('#svg').getBoundingClientRect(); const w=maxX+PADX, h=maxY+PADY;
-  view.k=Math.min(1.2, Math.max(.2, Math.min(r.width/w, r.height/h)));
-  view.x=(r.width-w*view.k)/2; view.y=Math.max(0,(r.height-h*view.k)/2); applyView();
+  const b=bounds(), r=$('#svg').getBoundingClientRect(), w=b.x1-b.x0, h=b.y1-b.y0;
+  view.k=Math.min(1.2, Math.max(.15, Math.min(r.width/w, r.height/h)));
+  view.x=(r.width-w*view.k)/2 - b.x0*view.k; view.y=(r.height-h*view.k)/2 - b.y0*view.k; applyView();
 }
 function centerOn(id){
   const p=lastLayout?.pos.get(id); if(!p) return; const r=$('#svg').getBoundingClientRect();
   view.x=r.width/2-(p.x+NW/2)*view.k; view.y=r.height/2-(p.y+NH/2)*view.k; applyView();
 }
+const cssEsc=s=>String(s).replace(/["\\]/g,'\\$&');
+const gnodeEl=id=>document.querySelector(`#nodes .gnode[data-id="${cssEsc(id)}"]`);
+function graphPt(e){ const r=$('#svg').getBoundingClientRect(); return {x:(e.clientX-r.left-view.x)/view.k, y:(e.clientY-r.top-view.y)/view.k}; }
+function addDep(from,to){
+  const f=node(from), n=node(to);
+  if(!f||!n||from===to) return;
+  if(nodeDeps(n).includes(from)){ toast('이미 연결돼 있어요'); return; }
+  if(ancestors(from).has(to)){ toast('순환 의존이 생겨서 연결할 수 없어요'); return; }
+  n.requires.all.push({node:from,minLevel:1});
+  changed(true); renderAll(); toast(`${f.name} → ${n.name} 연결했어요`);
+}
 (function graphEvents(){
-  const svg=$('#svg'); let drag=null;
-  svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y,moved:false}; svg.classList.add('pan'); });
-  window.addEventListener('mousemove',e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
-    if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true; view.x=drag.vx+dx; view.y=drag.vy+dy; applyView(); });
-  window.addEventListener('mouseup',e=>{ if(!drag) return; svg.classList.remove('pan');
-    if(!drag.moved){ const g=e.target.closest&&e.target.closest('.gnode'); select(g?g.dataset.id:null); }
-    drag=null; });
+  const svg=$('#svg'); let pan=null, nd=null, link=null;
+  svg.addEventListener('mousedown',e=>{
+    if(e.button!==0) return;
+    const g=e.target.closest&&e.target.closest('.gnode');
+    if(g && e.target.closest('.port')){
+      link={from:g.dataset.id};
+      document.querySelectorAll('#nodes .gnode').forEach(x=>{ if(x.dataset.id!==link.from) x.classList.add('linkable'); });
+      return;
+    }
+    if(g){
+      const id=g.dataset.id;
+      const ids = selSet.has(id)&&selSet.size>1 ? [...selSet].filter(i=>lastLayout.pos.has(i)) : [id];
+      nd={id,ids,x:e.clientX,y:e.clientY,moved:false,
+        start:new Map(ids.map(i=>{ const p=lastLayout.pos.get(i); return [i,{x:p.x,y:p.y}]; }))};
+      return;
+    }
+    pan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y,moved:false}; svg.classList.add('pan');
+  });
+  window.addEventListener('mousemove',e=>{
+    if(link){ const a=lastLayout.pos.get(link.from); if(!a) return;
+      const p=graphPt(e), x1=a.x+NW, y1=a.y+NH/2;
+      $('#tmp').innerHTML=`<path d="M${x1},${y1} C${x1+70},${y1} ${p.x-70},${p.y} ${p.x},${p.y}"/>`; return; }
+    if(nd){
+      if(!nd.moved && Math.abs(e.clientX-nd.x)+Math.abs(e.clientY-nd.y)>3) nd.moved=true;
+      if(!nd.moved) return;
+      const dx=(e.clientX-nd.x)/view.k, dy=(e.clientY-nd.y)/view.k;
+      for(const i of nd.ids){ const s0=nd.start.get(i); const np={x:Math.round(s0.x+dx),y:Math.round(s0.y+dy)};
+        lastLayout.pos.set(i,np); const g=gnodeEl(i); if(g) g.setAttribute('transform',`translate(${np.x},${np.y})`); }
+      $('#edges').innerHTML=edgesSVG(lastLayout,currentRel());
+      return; }
+    if(pan){ const dx=e.clientX-pan.x, dy=e.clientY-pan.y;
+      if(Math.abs(dx)+Math.abs(dy)>3) pan.moved=true; view.x=pan.vx+dx; view.y=pan.vy+dy; applyView(); }
+  });
+  window.addEventListener('mouseup',e=>{
+    if(link){
+      document.querySelectorAll('.gnode.linkable').forEach(x=>x.classList.remove('linkable'));
+      $('#tmp').innerHTML='';
+      const g=e.target.closest&&e.target.closest('.gnode');
+      const to=g&&g.dataset.id, from=link.from; link=null;
+      if(to&&to!==from) addDep(from,to);
+      return;
+    }
+    if(nd){
+      if(nd.moved){
+        for(const i of nd.ids){ const p=lastLayout.pos.get(i), n=node(i); if(n) n.pos={x:p.x,y:p.y}; }
+        const grab = !selSet.has(nd.id);
+        if(grab){ sel=nd.id; selSet=new Set([nd.id]); }
+        changed(true);
+        if(grab) renderAll(); else { renderGraph(lastIssues); renderRight(); }
+      } else select(nd.id, e.ctrlKey||e.metaKey||e.shiftKey);
+      nd=null; return;
+    }
+    if(pan){ svg.classList.remove('pan'); if(!pan.moved) select(null); pan=null; }
+  });
   svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
     const k2=Math.min(2.5,Math.max(.15,view.k*Math.exp(-e.deltaY*0.0015)));
     view.x=mx-(mx-view.x)*k2/view.k; view.y=my-(my-view.y)*k2/view.k; view.k=k2; applyView(); },{passive:false});
@@ -463,9 +567,10 @@ function renderLeft(issues){
     const keepFocus = document.activeElement && document.activeElement.id==='q';
     el.innerHTML=`<div class="pad" style="padding-bottom:8px">
         <div class="row"><input id="q" placeholder="이름·ID·설명 검색" value="${esc(filter)}"><button class="pri fx0" id="addNode">+ 노드</button></div>
+        <div class="hint" style="margin-top:0">Ctrl(⌘)+클릭으로 여러 개 선택 · 그래프에서 드래그로 위치 이동 · 노드 오른쪽 점을 끌어 연결</div>
         <div class="row" style="margin-top:6px"><select id="eraF"><option value="">모든 시대 (${P.nodes.length})</option>${P.eras.map(e=>`<option value="${esc(e.id)}" ${eraFilter===e.id?'selected':''}>${esc(e.name)} (${P.nodes.filter(n=>n.era===e.id).length})</option>`).join('')}</select></div>
       </div>
-      <ul class="nlist">${list.map(n=>`<li data-id="${esc(n.id)}" class="${n.id===sel?'on':''}">
+      <ul class="nlist">${list.map(n=>`<li data-id="${esc(n.id)}" class="${selSet.has(n.id)?'on':''}">
         <span class="dot" style="background:${esc(eraColor(n.era))}"></span>
         <span class="nm">${esc(n.name)} <span class="id">${esc(n.id)}</span></span>
         ${nodeIssue.has(n.id)?`<span class="flag" style="color:${lvColor(nodeIssue.get(n.id))}">●</span>`:''}
@@ -474,7 +579,9 @@ function renderLeft(issues){
     if(keepFocus){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
     $('#eraF').onchange=e=>{ eraFilter=e.target.value; renderLeft(validate()); };
     $('#addNode').onclick=addNode;
-    el.querySelectorAll('.nlist li').forEach(li=>li.onclick=()=>{ select(li.dataset.id); centerOn(li.dataset.id); });
+    el.querySelectorAll('.nlist li').forEach(li=>li.onclick=e=>{
+      const add=e.ctrlKey||e.metaKey||e.shiftKey;
+      select(li.dataset.id,add); if(!add) centerOn(li.dataset.id); });
   }
   if(tab==='res'){
     el.innerHTML=`<div class="pad"><div class="lbl">재화 목록</div><div class="hint" style="margin-bottom:8px">노드는 재화를 ID로 참조해요. ID를 바꾸면 모든 참조가 함께 바뀝니다. "직접 수집"은 클릭·기본 생산처럼 노드 없이 얻는 재화예요.</div>
@@ -509,14 +616,26 @@ function renderLeft(issues){
       <div class="hint">장르·톤·핵심 루프·피하고 싶은 것 등을 적어두면 AI 제안 품질이 올라가요.</div>
       <div class="lbl" style="margin-top:18px">통계</div>
       <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 시대 ${P.eras.length} · 최대 단계 ${lastLayout?lastLayout.cols:0}</div>
+      <div class="lbl" style="margin-top:18px">로컬 파일</div>
+      <div class="muted" id="pFile"></div>
+      <div class="row" style="margin-top:6px"><button id="pSave">${FS_OK?'파일에 저장 (Ctrl+S)':'JSON 다운로드'}</button><button id="pOpen">파일 열기</button></div>
+      ${FS_OK?`<label style="display:flex;gap:7px;align-items:center;margin-top:8px;color:var(--tx2)"><input type="checkbox" id="pAuto" ${autoSave?'checked':''} style="width:auto">바뀔 때마다 파일에 자동 저장</label>`:''}
+      <div class="hint">${FS_OK?'한 번 저장 위치를 고르면 이후 Ctrl+S로 같은 파일에 덮어써요. 게임 레포 안(예: Assets/Data/upgrades.json)을 고르면 바로 커밋할 수 있어요.':'이 브라우저는 파일 덮어쓰기를 지원하지 않아 다운로드로 저장돼요. (Chrome·Edge 권장)'}</div>
+      <div class="lbl" style="margin-top:18px">도구</div>
+      <div class="row"><button id="pCurve">비용 곡선 비교</button></div>
       <div class="lbl" style="margin-top:18px">초기화</div>
       <div class="row"><button id="newProj">빈 프로젝트</button><button id="sampleProj">샘플 불러오기</button></div>
       <div class="hint">현재 작업은 실행 취소(Ctrl+Z)로 되돌릴 수 있어요. 중요한 데이터는 먼저 JSON으로 내보내 두세요.</div>
     </div>`;
     $('#pName').oninput=e=>{ P.meta.name=e.target.value; $('#projName').textContent=P.meta.name; changed(); };
     $('#pConcept').oninput=e=>{ P.meta.concept=e.target.value; changed(); };
-    $('#newProj').onclick=e=>confirmBtn(e.target,()=>{ P=blankProject(); sel=null; fitted=false; changed(true); renderAll(); });
-    $('#sampleProj').onclick=e=>confirmBtn(e.target,()=>{ P=sample(); sel=null; fitted=false; changed(true); renderAll(); });
+    $('#newProj').onclick=e=>confirmBtn(e.target,()=>{ P=normalize(blankProject()); sel=null; selSet.clear(); fitted=false; changed(true); renderAll(); });
+    $('#sampleProj').onclick=e=>confirmBtn(e.target,()=>{ P=normalize(sample()); sel=null; selSet.clear(); fitted=false; changed(true); renderAll(); });
+    $('#pFile').textContent = fileHandle ? `${fileHandle.name} · ${dirty?'저장 안 됨':'저장됨'}` : '아직 연결된 파일이 없어요';
+    $('#pSave').onclick=()=>saveFile();
+    $('#pOpen').onclick=()=>{ pendingHandle=null; FS_OK?openFilePicker():openImport(''); };
+    $('#pCurve').onclick=()=>openCurve(selSet.size?[...selSet]:P.nodes.map(n=>n.id));
+    const pa=$('#pAuto'); if(pa) pa.onchange=e=>setAutoSave(e.target.checked);
   }
 }
 function renameRes(i,inp){
@@ -536,21 +655,33 @@ function confirmBtn(b,fn){
 }
 
 /* ================= 오른쪽: 노드 편집 ================= */
-function select(id){ sel=id&&node(id)?id:null; renderAll(); }
+function select(id,additive){
+  if(id&&!node(id)) id=null;
+  if(!id){ sel=null; selSet.clear(); }
+  else if(additive){
+    if(selSet.has(id)){ selSet.delete(id); if(sel===id) sel=[...selSet].pop()||null; }
+    else { selSet.add(id); sel=id; }
+  } else { selSet=new Set([id]); sel=id; }
+  renderAll();
+}
+const selNodes=()=>[...selSet].map(node).filter(Boolean);
 function addNode(){
   const base = sel?node(sel):null;
   const id=uniqueId('new_node');
   const n={id,name:'새 업그레이드',era:base?base.era:(eraFilter||P.eras[0]?.id||''),status:'idea',maxLevel:1,
     cost:P.resources[0]?[{resource:P.resources[0].id,base:10,growth:1}]:[],
-    requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:[]};
-  P.nodes.push(n); sel=id; changed(true); renderAll(); centerOn(id);
+    requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:[],pos:null};
+  if(base&&base.pos) n.pos={x:base.pos.x+NW+GX,y:base.pos.y};
+  P.nodes.push(n); sel=id; selSet=new Set([id]); changed(true); renderAll(); centerOn(id);
   setTimeout(()=>{ const f=document.querySelector('#right [data-p="name"]'); if(f){ f.focus(); f.select(); } },0);
   if(base) toast(`"${base.name}"를 요구하는 새 노드를 만들었어요`);
 }
 function renderRight(){
-  const el=$('#right'); const n=sel&&node(sel);
+  const el=$('#right');
+  if(selSet.size>1){ renderBulk(el); return; }
+  const n=sel&&node(sel);
   if(!n){
-    el.innerHTML=`<div class="empty">노드를 선택하세요<br><br><span style="font-size:12px">그래프나 목록에서 클릭 · 빈 곳 드래그로 이동 · 휠로 확대/축소<br><br>노드를 선택한 채 <b>+ 노드</b>를 누르면<br>그 노드를 요구하는 다음 노드가 생겨요</span></div>`; return;
+    el.innerHTML=`<div class="empty">노드를 선택하세요<br><br><span style="font-size:12px">그래프나 목록에서 클릭 · 빈 곳 드래그로 화면 이동 · 휠로 확대/축소<br>노드를 끌면 위치가 고정되고, 오른쪽 점을 끌면 의존성이 연결돼요<br>Ctrl(⌘)+클릭으로 여러 개를 골라 한꺼번에 바꿀 수 있어요<br><br>노드를 선택한 채 <b>+ 노드</b>를 누르면<br>그 노드를 요구하는 다음 노드가 생겨요</span></div>`; return;
   }
   const resOpts=v=>P.resources.map(r=>`<option value="${esc(r.id)}" ${r.id===v?'selected':''}>${esc(r.name)} (${esc(r.id)})</option>`).join('') + (res(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
   const nodeOpts=v=>P.nodes.filter(m=>m.id!==n.id).map(m=>`<option value="${esc(m.id)}" ${m.id===v?'selected':''}>${esc(m.name)} (${esc(m.id)})</option>`).join('') + (node(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
@@ -572,9 +703,11 @@ function renderRight(){
     <div class="row"><div><div class="lbl">시대</div><select data-p="era">${P.eras.map(e=>`<option value="${esc(e.id)}" ${e.id===n.era?'selected':''}>${esc(e.name)}</option>`).join('')}${era(n.era)?'':`<option value="${esc(n.era)}" selected>⚠ ${esc(n.era||'(없음)')}</option>`}</select></div>
       <div><div class="lbl">상태</div><select data-p="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===n.status?'selected':''}>${v}</option>`).join('')}</select></div>
       <div style="flex:0 0 74px"><div class="lbl">최대 Lv</div><input type="number" min="1" data-p="maxLevel" data-t="num" value="${n.maxLevel}"></div></div>
+    <div class="row" style="margin-top:8px"><div class="hint" style="margin:0">${n.pos?`⌖ 수동 배치 (${n.pos.x}, ${n.pos.y})`:'위치: 자동 정렬'}</div>
+      ${n.pos?'<button class="ghost fx0" id="unpinNode" title="자동 정렬 위치로 되돌리기">자동 정렬로</button>':''}</div>
   </div>
   <div class="sec">
-    <h3>비용 <small>Lv n 가격 = 기본 × 증가율^(n−1)</small></h3>
+    <h3>비용 <small>Lv n 가격 = 기본 × 증가율^(n−1)</small><span class="sp"></span>${n.maxLevel>1?'<button class="ghost" id="curveBtn">곡선 보기</button>':''}</h3>
     <div class="lst">${n.cost.map((c,i)=>`<div class="row"><select data-p="cost.${i}.resource">${resOpts(c.resource)}</select>
       <input type="number" data-p="cost.${i}.base" data-t="num" value="${c.base}" title="기본 비용" style="width:76px" class="fx0">
       <input type="number" step="0.01" data-p="cost.${i}.growth" data-t="num" value="${c.growth}" title="레벨당 증가율" style="width:64px" class="fx0">
@@ -631,12 +764,77 @@ function renderRight(){
     changed(true); renderAll(); });
   el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ select(c.dataset.go); centerOn(c.dataset.go); });
   $('#nodeId').addEventListener('change',e=>renameNode(n,e.target));
+  const up=$('#unpinNode'); if(up) up.onclick=()=>{ n.pos=null; changed(true); renderAll(); toast('자동 정렬 위치로 되돌렸어요'); };
+  const cb=$('#curveBtn'); if(cb) cb.onclick=()=>openCurve([n.id]);
   $('#delNode').onclick=e=>confirmBtn(e.target,()=>{
     const refs=P.nodes.filter(m=>nodeDeps(m).includes(n.id));
-    P.nodes=P.nodes.filter(m=>m!==n); sel=null; changed(true); renderAll();
+    P.nodes=P.nodes.filter(m=>m!==n); sel=null; selSet.clear(); changed(true); renderAll();
     toast(refs.length?`삭제됨 — ${refs.length}개 노드에 끊긴 참조가 남았어요 (검증 참고)`:'삭제됨');
   });
-  $('#dupNode').onclick=()=>{ const c=JSON.parse(JSON.stringify(n)); c.id=uniqueId(n.id+'_copy'); c.name=n.name+' (복사)'; P.nodes.push(c); sel=c.id; changed(true); renderAll(); centerOn(c.id); };
+  $('#dupNode').onclick=()=>{ const c=JSON.parse(JSON.stringify(n)); c.id=uniqueId(n.id+'_copy'); c.name=n.name+' (복사)';
+    if(c.pos) c.pos={x:c.pos.x+24,y:c.pos.y+NH+GY};
+    P.nodes.push(c); sel=c.id; selSet=new Set([c.id]); changed(true); renderAll(); centerOn(c.id); };
+}
+function renderBulk(el){
+  const ns=selNodes(); const ids=ns.map(n=>n.id);
+  const others=P.nodes.filter(m=>!selSet.has(m.id));
+  const eraCnt=P.eras.map(e=>`${e.name} ${ns.filter(n=>n.era===e.id).length}`).filter(t=>!/ 0$/.test(t)).join(' · ');
+  el.innerHTML=`
+  <div class="sec">
+    <h3>여러 노드 선택됨 <small>${ids.length}개</small><span class="sp"></span><button class="ghost" id="bClear">선택 해제</button></h3>
+    <div class="chips">${ns.map(n=>`<span class="chip" data-go="${esc(n.id)}">${esc(n.name)}</span>`).join('')}</div>
+    <div class="hint">${esc(eraCnt||'시대 없음')} · Ctrl(⌘)+클릭으로 더하거나 빼요. 그래프에서 끌면 함께 움직여요.</div>
+  </div>
+  <div class="sec">
+    <h3>일괄 변경</h3>
+    <div class="lbl">시대</div>
+    <div class="row"><select id="bEra">${P.eras.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select><button class="fx0" id="bEraGo">적용</button></div>
+    <div class="lbl">상태</div>
+    <div class="row"><select id="bSt">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button class="fx0" id="bStGo">적용</button></div>
+    <div class="lbl">태그</div>
+    <div class="row"><input id="bTag" placeholder="태그 이름"><button class="fx0" id="bTagAdd">추가</button><button class="fx0" id="bTagDel">제거</button></div>
+    <div class="lbl">선행 조건 추가 <small class="muted">(선택한 노드 전부가 이 노드를 요구하게)</small></div>
+    <div class="row"><select id="bReq">${others.map(m=>`<option value="${esc(m.id)}">${esc(m.name)} (${esc(m.id)})</option>`).join('')||'<option value="">(없음)</option>'}</select><button class="fx0" id="bReqGo">추가</button></div>
+  </div>
+  <div class="sec">
+    <h3>배치 · 도구</h3>
+    <div class="row"><button id="bAuto">자동 정렬로 되돌리기</button><button id="bCurve">비용 곡선 비교</button></div>
+    <div class="row" style="margin-top:6px"><button id="bAlignY">세로 줄맞춤</button><button id="bAlignX">가로 줄맞춤</button></div>
+    <div class="hint">줄맞춤은 수동 배치로 고정돼요 (⌖ 표시).</div>
+  </div>
+  <div class="sec">
+    <h3>삭제</h3>
+    <div class="row"><button class="danger" id="bDel">선택한 ${ids.length}개 삭제</button></div>
+  </div>`;
+  const each=fn=>{ selNodes().forEach(fn); changed(true); renderAll(); };
+  el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ select(c.dataset.go); centerOn(c.dataset.go); });
+  $('#bClear').onclick=()=>select(null);
+  $('#bEraGo').onclick=()=>{ const v=$('#bEra').value; each(n=>n.era=v); toast(`시대를 ${era(v)?.name||v}(으)로 바꿨어요`); };
+  $('#bStGo').onclick=()=>{ const v=$('#bSt').value; each(n=>n.status=v); toast(`상태를 ${STATUS[v]}(으)로 바꿨어요`); };
+  $('#bTagAdd').onclick=()=>{ const t=$('#bTag').value.trim(); if(!t) return; each(n=>{ if(!n.tags.includes(t)) n.tags.push(t); }); toast(`태그 "${t}" 추가`); };
+  $('#bTagDel').onclick=()=>{ const t=$('#bTag').value.trim(); if(!t) return; each(n=>{ n.tags=n.tags.filter(x=>x!==t); }); toast(`태그 "${t}" 제거`); };
+  $('#bReqGo').onclick=()=>{ const from=$('#bReq').value; if(!from) return;
+    let ok=0,skip=0;
+    for(const n of selNodes()){
+      if(n.id===from||nodeDeps(n).includes(from)||ancestors(from).has(n.id)){ skip++; continue; }
+      n.requires.all.push({node:from,minLevel:1}); ok++; }
+    changed(true); renderAll(); toast(`${ok}개 연결${skip?` · ${skip}개 건너뜀(중복·순환)`:''}`); };
+  $('#bAuto').onclick=()=>{ each(n=>n.pos=null); toast('자동 정렬 위치로 되돌렸어요'); };
+  $('#bCurve').onclick=()=>openCurve(ids);
+  $('#bAlignY').onclick=()=>{ const xs=ids.map(i=>lastLayout.pos.get(i)?.x??0); const x=Math.round(xs.reduce((a,b)=>a+b,0)/xs.length);
+    const sorted=ids.slice().sort((a,b)=>(lastLayout.pos.get(a)?.y??0)-(lastLayout.pos.get(b)?.y??0));
+    let y=Math.min(...ids.map(i=>lastLayout.pos.get(i)?.y??0));
+    sorted.forEach(i=>{ node(i).pos={x,y}; y+=NH+GY; }); changed(true); renderAll(); };
+  $('#bAlignX').onclick=()=>{ const ys=ids.map(i=>lastLayout.pos.get(i)?.y??0); const y=Math.round(ys.reduce((a,b)=>a+b,0)/ys.length);
+    const sorted=ids.slice().sort((a,b)=>(lastLayout.pos.get(a)?.x??0)-(lastLayout.pos.get(b)?.x??0));
+    let x=Math.min(...ids.map(i=>lastLayout.pos.get(i)?.x??0));
+    sorted.forEach(i=>{ node(i).pos={x,y}; x+=NW+GX; }); changed(true); renderAll(); };
+  $('#bDel').onclick=e=>confirmBtn(e.target,()=>{
+    const gone=new Set(ids); P.nodes=P.nodes.filter(m=>!gone.has(m.id));
+    const refs=P.nodes.filter(m=>nodeDeps(m).some(d=>gone.has(d))).length;
+    sel=null; selSet.clear(); changed(true); renderAll();
+    toast(refs?`${ids.length}개 삭제 — ${refs}개 노드에 끊긴 참조가 남았어요`:`${ids.length}개 삭제됨`);
+  });
 }
 function renderDerived(){
   const n=sel&&node(sel); if(!n) return;
@@ -663,12 +861,12 @@ function readVal(inp){
 }
 function getPath(o,p){ return p.split('.').reduce((a,k)=>a[/^\d+$/.test(k)?+k:k],o); }
 function setPath(o,p,v){ const ks=p.split('.'); const last=ks.pop(); const t=ks.reduce((a,k)=>a[/^\d+$/.test(k)?+k:k],o); t[/^\d+$/.test(last)?+last:last]=v; }
-function renameNode(n,inp){
+function renameNode(n,inp){ // ID 변경 — 모든 참조 갱신
   const nv=slug(inp.value);
   if(!nv){ toast('ID는 영문·숫자·_ 만 쓸 수 있어요'); inp.value=n.id; return; }
   if(nv!==n.id && node(nv)){ toast('이미 있는 ID예요'); inp.value=n.id; return; }
   const old=n.id; for(const m of P.nodes) [...m.requires.all,...m.requires.any].forEach(c=>{ if(c.node===old) c.node=nv; });
-  n.id=nv; sel=nv; changed(true); renderAll();
+  n.id=nv; sel=nv; selSet=new Set([nv]); changed(true); renderAll();
 }
 
 /* ================= 상단 / 검증 배지 ================= */
@@ -700,12 +898,104 @@ async function copyText(t,b){
 const canDownload = (()=>{ try{ return window.self===window.top; }catch(e){ return false; } })();
 function download(name,text){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'application/json'})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 function exportJSON(){ return JSON.stringify(normalize(P),null,2); }
+function fileName(){ return (slug(P.meta.name)||'upgrade-tree')+'.json'; }
+
+/* ================= 로컬 파일 (File System Access) ================= */
+const FS_OK = typeof window.showSaveFilePicker==='function' && canDownload;
+const AUTO_KEY='upgradeTreeEditor.autoSave';
+let fileHandle=null, dirty=false, autoSave=localStorage.getItem(AUTO_KEY)==='1', autoTimer=null, pendingHandle=null;
+function idbOpen(){ return new Promise((ok,no)=>{ const q=indexedDB.open('upgradeTreeEditor',1);
+  q.onupgradeneeded=()=>q.result.createObjectStore('fs'); q.onsuccess=()=>ok(q.result); q.onerror=()=>no(q.error); }); }
+async function idbSet(k,v){ try{ const db=await idbOpen(); await new Promise((ok,no)=>{ const t=db.transaction('fs','readwrite');
+  t.objectStore('fs').put(v,k); t.oncomplete=ok; t.onerror=()=>no(t.error); }); }catch(e){} }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((ok,no)=>{ const t=db.transaction('fs','readonly');
+  const r=t.objectStore('fs').get(k); r.onsuccess=()=>ok(r.result); r.onerror=()=>no(r.error); }); }catch(e){ return null; } }
+async function hasPerm(h,ask){
+  if(!h||!h.queryPermission) return !!h;
+  const o={mode:'readwrite'};
+  if(await h.queryPermission(o)==='granted') return true;
+  if(!ask) return false;
+  try{ return (await h.requestPermission(o))==='granted'; }catch(e){ return false; }
+}
+function markDirty(){ dirty=true; renderFile(); if(autoSave&&fileHandle) queueAutoSave(); }
+function queueAutoSave(){ clearTimeout(autoTimer); autoTimer=setTimeout(()=>{ if(fileHandle&&dirty) saveFile(true); },1500); }
+async function writeTo(h,text){ const w=await h.createWritable(); await w.write(text); await w.close(); }
+async function saveFile(silent){
+  if(!FS_OK || !fileHandle) return saveFileAs();
+  try{
+    if(!await hasPerm(fileHandle,!silent)){ if(!silent) toast('파일 쓰기 권한이 필요해요'); return false; }
+    await writeTo(fileHandle,exportJSON());
+    dirty=false; renderFile(); if(!silent) toast('저장했어요 — '+fileHandle.name);
+    return true;
+  }catch(e){ if(!silent) toast('저장 실패: '+e.message); return false; }
+}
+async function saveFileAs(){
+  const j=exportJSON(), name=fileName();
+  if(!FS_OK){ download(name,j); toast('브라우저 다운로드로 저장했어요'); return true; }
+  try{
+    const h=await window.showSaveFilePicker({suggestedName:name,
+      types:[{description:'업그레이드 트리 JSON',accept:{'application/json':['.json']}}]});
+    await writeTo(h,j); fileHandle=h; idbSet('handle',h);
+    dirty=false; renderFile(); toast('저장했어요 — '+h.name); return true;
+  }catch(e){ if(e.name!=='AbortError') toast('저장 실패: '+e.message); return false; }
+}
+async function openFilePicker(){
+  if(!FS_OK){ const inp=$('#impFile'); if(inp) inp.click(); return; }
+  try{
+    const [h]=await window.showOpenFilePicker({types:[{description:'업그레이드 트리 JSON',
+      accept:{'application/json':['.json'],'text/plain':['.txt','.md']}}]});
+    const text=await (await h.getFile()).text();
+    pendingHandle = /\.json$/i.test(h.name) ? h : null;
+    openImport(text);
+  }catch(e){ if(e.name!=='AbortError') toast('열기 실패: '+e.message); }
+}
+function linkHandle(h,keepDirty){
+  if(!h) return; fileHandle=h; idbSet('handle',h); dirty=!!keepDirty; renderFile();
+}
+function detachFile(){ fileHandle=null; idbSet('handle',null); dirty=false; renderFile(); toast('파일 연결을 끊었어요'); }
+function renderFile(){
+  const el=$('#fileChip'), btn=$('#saveBtn'); if(!el) return;
+  if(fileHandle){
+    el.className = dirty?'dirty':'';
+    el.innerHTML = `<span class="dot"></span><b>${esc(fileHandle.name)}</b><span class="muted">${dirty?'저장 안 됨':'저장됨'}</span>`;
+    el.title = `연결된 파일: ${fileHandle.name}\nCtrl+S로 덮어써요${autoSave?'\n자동 저장 켜짐':''}`;
+    if(btn) btn.textContent='저장';
+  }else{
+    el.className='none';
+    el.innerHTML = `<span class="dot"></span><span class="muted">${FS_OK?'파일 없음':'브라우저 다운로드'}</span>`;
+    el.title = FS_OK?'아직 로컬 파일에 연결되지 않았어요 — [파일로 저장]을 누르면 위치를 고르고 이후에는 Ctrl+S로 덮어써요'
+                    :'이 환경에서는 파일 덮어쓰기를 지원하지 않아 다운로드로 저장돼요';
+    if(btn) btn.textContent='파일로 저장';
+  }
+}
+$('#saveBtn').onclick=()=>saveFile();
+$('#fileChip').onclick=()=>{ if(fileHandle) openFileMenu(); };
+function openFileMenu(){
+  openModal('연결된 파일',`<div>현재 <b>${esc(fileHandle.name)}</b>에 저장되고 있어요.</div>
+    <label class="chk" style="display:flex;gap:7px;align-items:center;margin-top:12px"><input type="checkbox" id="mAuto" ${autoSave?'checked':''} style="width:auto">바뀔 때마다 자동으로 파일에 저장</label>
+    <div class="hint">자동 저장을 꺼도 Ctrl+S로 언제든 저장할 수 있어요.</div>`,
+    [['연결 끊기',()=>{ detachFile(); closeModal(); }],['닫기',closeModal],['지금 저장',async()=>{ await saveFile(); closeModal(); },'pri']]);
+  $('#mAuto').onchange=e=>setAutoSave(e.target.checked);
+}
+function setAutoSave(v){ autoSave=!!v; localStorage.setItem(AUTO_KEY,autoSave?'1':'0'); renderFile();
+  if(autoSave&&fileHandle&&dirty) queueAutoSave(); }
+(async()=>{ if(!FS_OK) { renderFile(); return; }
+  const h=await idbGet('handle');
+  if(h){ fileHandle=h; renderFile(); if(!await hasPerm(h,false)) $('#fileChip').title='저장할 때 파일 권한을 다시 허용해야 해요 — '+h.name; }
+  else renderFile();
+})();
 
 $('#exportBtn').onclick=()=>{
   const j=exportJSON();
-  const btns=[['닫기',closeModal],['복사',b=>copyText(j,b),'pri']];
-  if(canDownload) btns.splice(1,0,['파일로 저장',()=>download((slug(P.meta.name)||'upgrade-tree')+'.json',j)]);
-  openModal('JSON 내보내기',`<div class="hint" style="margin:0 0 8px">이 JSON이 원본 데이터예요. 게임 프로젝트의 git에 넣어두면 버전 관리가 돼요.${canDownload?'':' (이 화면에선 파일 저장이 막혀 있어서 복사해서 .json으로 저장하세요)'}</div><textarea class="big" readonly>${esc(j)}</textarea>`,btns);
+  const btns=[['닫기',closeModal]];
+  if(canDownload) btns.push(['다운로드',()=>download(fileName(),j)]);
+  if(FS_OK) btns.push([fileHandle?'파일에 저장':'파일로 저장…',()=>saveFile()]);
+  if(FS_OK) btns.push(['다른 이름으로…',()=>saveFileAs()]);
+  btns.push(['복사',b=>copyText(j,b),'pri']);
+  openModal('JSON 내보내기',`<div class="hint" style="margin:0 0 8px">이 JSON이 원본 데이터예요. 게임 프로젝트의 git에 넣어두면 버전 관리가 돼요.${canDownload?'':' (이 화면에선 파일 저장이 막혀 있어서 복사해서 .json으로 저장하세요)'}</div>
+    ${FS_OK?`<label class="chk" style="display:flex;gap:7px;align-items:center;margin-bottom:8px"><input type="checkbox" id="xAuto" ${autoSave?'checked':''} style="width:auto">파일에 연결한 뒤 바뀔 때마다 자동 저장 ${fileHandle?`<span class="muted">(현재: ${esc(fileHandle.name)})</span>`:''}</label>`:''}
+    <textarea class="big" readonly>${esc(j)}</textarea>`,btns);
+  const xa=$('#xAuto'); if(xa) xa.onchange=e=>setAutoSave(e.target.checked);
 };
 
 function aiMarkdown(request){
@@ -733,6 +1023,7 @@ ${P.meta.concept||'(작성되지 않음)'}
   - \`description\`: 플레이어에게 보이는 문장. \`{value1}\`, \`{value2}\`…는 effects[0], effects[1]…의 value, \`{maxLevel}\`도 가능
   - \`designNote\`: 디자이너의 의도 메모 (게임에 노출되지 않음)
   - \`tags[]\`
+  - \`pos\`: 에디터에서 수동 배치한 좌표 { x, y } 또는 null (자동 정렬). **값을 그대로 유지해 주세요.**
 
 ## 현재 상태 요약
 - 재화 ${P.resources.length}개: ${P.resources.map(r=>`${r.name}(${r.id})`).join(', ')}
@@ -750,7 +1041,7 @@ ${request||'(여기에 요청을 적어주세요)'}
 
 ## 응답 규칙
 1. 수정이 반영된 **전체 JSON**을 \`\`\`json 코드블록 하나로 반환해 주세요. (위 스키마 그대로, 이 에디터에 다시 불러옵니다)
-2. 기존 노드의 id는 바꾸지 마세요. 새 노드 id는 snake_case 영문으로, 기존과 겹치지 않게.
+2. 기존 노드의 id와 pos는 바꾸지 마세요. 새 노드 id는 snake_case 영문으로, 기존과 겹치지 않게. 새 노드의 pos는 null로 두세요.
 3. 수치 효과는 effects에 구조화하고, description에서는 {value1} 같은 템플릿으로 참조해 주세요.
 4. 새로 추가하거나 크게 바꾼 노드에는 designNote에 의도를 짧게 적어 주세요.
 5. JSON 뒤에 무엇을 왜 바꿨는지 짧게 요약해 주세요.
@@ -772,6 +1063,73 @@ $('#aiBtn').onclick=()=>{
   document.querySelectorAll('#aiPresets .chip').forEach(c=>c.onclick=()=>{ $('#aiReq').value=c.textContent; upd(); });
 };
 
+/* ================= 비용 곡선 비교 ================= */
+let curve={res:'',mode:'level',log:true,scope:'sel'};
+function openCurve(ids){
+  const list=(ids&&ids.length?ids:P.nodes.map(n=>n.id)).filter(i=>node(i));
+  if(!list.length){ toast('비교할 노드가 없어요'); return; }
+  const cnt=new Map();
+  for(const i of list) for(const c of node(i).cost) cnt.set(c.resource,(cnt.get(c.resource)||0)+1);
+  for(const n of P.nodes) for(const c of n.cost) if(!cnt.has(c.resource)) cnt.set(c.resource,0);
+  if(!cnt.size){ toast('비용이 설정된 노드가 없어요'); return; }
+  const best=[...cnt.entries()].sort((a,b)=>b[1]-a[1])[0][0];
+  if(!cnt.has(curve.res) || !cnt.get(curve.res)) curve.res=best;
+  curve.scope='sel';
+  const eraOf=node(list[0]).era;
+  openModal('비용 곡선 비교',`
+    <div class="row">
+      <div><div class="lbl">재화</div><select id="cRes">${[...cnt.keys()].map(r=>`<option value="${esc(r)}" ${r===curve.res?'selected':''}>${esc(resName(r))}</option>`).join('')}</select></div>
+      <div><div class="lbl">세로축</div><select id="cMode"><option value="level">레벨별 가격</option><option value="sum" ${curve.mode==='sum'?'selected':''}>Lv1부터 누적 합계</option></select></div>
+      <div><div class="lbl">눈금</div><select id="cLog"><option value="1" ${curve.log?'selected':''}>로그</option><option value="0" ${curve.log?'':'selected'}>선형</option></select></div>
+      <div><div class="lbl">대상</div><select id="cScope"><option value="sel">선택한 ${list.length}개</option><option value="era">${esc(era(eraOf)?.name||'같은 시대')} 전체</option><option value="all">모든 노드</option></select></div>
+    </div>
+    <div id="cBox" style="margin-top:12px"></div>
+    <div class="hint">반복 구매 노드(최대 Lv 2 이상)의 가격이 레벨에 따라 어떻게 오르는지 비교해요. 선이 너무 가파르면 후반이 지루해지고, 너무 완만하면 금방 끝나요.</div>`,
+    [['닫기',closeModal]]);
+  const draw=()=>{
+    curve.res=$('#cRes').value; curve.mode=$('#cMode').value; curve.log=$('#cLog').value==='1'; curve.scope=$('#cScope').value;
+    const base = curve.scope==='sel' ? list
+      : curve.scope==='era' ? P.nodes.filter(n=>n.era===eraOf).map(n=>n.id)
+      : P.nodes.map(n=>n.id);
+    $('#cBox').innerHTML=curveSVG(base,curve);
+  };
+  ['#cRes','#cMode','#cLog','#cScope'].forEach(q=>$(q).onchange=draw);
+  draw();
+}
+function curveSVG(ids,st){
+  const W=820,H=320,ML=66,MR=16,MT=14,MB=30;
+  const series=[];
+  for(const id of ids){ const n=node(id); if(!n) continue;
+    const c=n.cost.find(c=>c.resource===st.res); if(!c) continue;
+    const lv=Math.max(1,Math.min(n.maxLevel,60)); let acc=0; const pts=[];
+    for(let l=1;l<=lv;l++){ const v=costAt(c,l); acc+=v; pts.push([l, st.mode==='sum'?acc:v]); }
+    series.push({n,pts}); }
+  if(!series.length) return `<div class="empty">${esc(resName(st.res))}를 비용으로 쓰는 노드가 없어요</div>`;
+  const maxX=Math.max(2,...series.map(s=>s.pts.length));
+  const all=series.flatMap(s=>s.pts.map(p=>p[1]));
+  const maxY=Math.max(1,...all), minY=st.log?Math.max(1,Math.min(...all)):0;
+  const lg=v=>Math.log10(Math.max(v,1));
+  const span=st.log?Math.max(lg(maxY)-lg(minY),1e-6):Math.max(maxY-minY,1e-6);
+  const X=l=>ML+(l-1)/(maxX-1)*(W-ML-MR);
+  const Y=v=>{ const t=st.log?(lg(v)-lg(minY))/span:(v-minY)/span; return MT+(1-Math.min(Math.max(t,0),1))*(H-MT-MB); };
+  let g='';
+  for(let i=0;i<=5;i++){ const t=i/5;
+    const raw=st.log?Math.pow(10,lg(minY)+t*span):minY+t*span, y=Y(raw);
+    const v=raw>=100?Math.round(raw):Math.round(raw*10)/10;
+    g+=`<line class="gl" x1="${ML}" y1="${y}" x2="${W-MR}" y2="${y}"/><text class="ax" x="${ML-8}" y="${y+3}" text-anchor="end">${esc(fmt(v))}</text>`; }
+  const step=Math.max(1,Math.ceil(maxX/12));
+  for(let l=1;l<=maxX;l+=step){ const x=X(l);
+    g+=`<line class="gl" x1="${x}" y1="${MT}" x2="${x}" y2="${H-MB}"/><text class="ax" x="${x}" y="${H-MB+16}" text-anchor="middle">Lv${l}</text>`; }
+  const col=i=>`hsl(${(i*57+28)%360} 72% 63%)`;
+  series.forEach((s,i)=>{
+    g+=`<path class="ln" stroke="${col(i)}" d="${s.pts.map((p,k)=>`${k?'L':'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"><title>${esc(s.n.name)}</title></path>`;
+    const last=s.pts[s.pts.length-1];
+    g+=`<circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="3.2" fill="${col(i)}"/>`; });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}">${g}</svg>
+    <div class="chips" style="margin-top:8px">${series.map((s,i)=>{ const last=s.pts[s.pts.length-1];
+      return `<span class="chip" style="cursor:default;border-color:${col(i)}"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${col(i)};margin-right:6px;vertical-align:-1px"></i>${esc(s.n.name)} <span class="muted">Lv${last[0]} → ${esc(fmt(last[1]))}</span></span>`; }).join('')}</div>`;
+}
+
 /* ================= 불러오기 + 차이 보기 ================= */
 function extractJSON(text){
   text=text.trim();
@@ -784,60 +1142,98 @@ function extractJSON(text){
 }
 function diff(a,b){
   const out=[];
-  const cmp=(label,la,lb,nameOf)=>{
+  const cmp=(coll,label,nameOf)=>{
+    const la=a[coll], lb=b[coll];
     const A=new Map(la.map(x=>[x.id,x])), B=new Map(lb.map(x=>[x.id,x]));
-    for(const [id,x] of B) if(!A.has(id)) out.push(['a',label,id,nameOf(x)]);
-    for(const [id,x] of A) if(!B.has(id)) out.push(['r',label,id,nameOf(x)]);
-    for(const [id,x] of B) if(A.has(id)){ const y=A.get(id);
+    lb.forEach((x,i)=>{ if(!A.has(x.id)) out.push(['a',coll,x.id,nameOf(x),label,i]); });
+    for(const [id,x] of A) if(!B.has(id)) out.push(['r',coll,id,nameOf(x),label,-1]);
+    lb.forEach((x,i)=>{ const y=A.get(x.id); if(!y) return;
       const fields=Object.keys({...x,...y}).filter(k=>JSON.stringify(x[k])!==JSON.stringify(y[k]));
-      if(fields.length) out.push(['c',label,id,nameOf(x)+' — '+fields.join(', ')]); }
+      if(fields.length) out.push(['c',coll,x.id,nameOf(x)+' — '+fields.join(', '),label,i]); });
   };
-  cmp('재화',a.resources,b.resources,x=>x.name); cmp('시대',a.eras,b.eras,x=>x.name); cmp('노드',a.nodes,b.nodes,x=>x.name);
-  if(a.meta.name!==b.meta.name||a.meta.concept!==b.meta.concept) out.push(['c','프로젝트','meta','이름/컨셉']);
+  cmp('resources','재화',x=>x.name); cmp('eras','시대',x=>x.name); cmp('nodes','노드',x=>x.name);
+  if(a.meta.name!==b.meta.name||a.meta.concept!==b.meta.concept) out.push(['c','meta','meta','이름/컨셉','프로젝트',-1]);
   return out;
 }
-$('#importBtn').onclick=()=>{
+function openImport(text){
   openModal('불러오기',`
-    <div class="hint" style="margin:0 0 8px">JSON 파일을 고르거나, JSON 또는 AI 응답 전체를 붙여넣으세요. 코드블록 안의 JSON을 자동으로 찾아요.</div>
-    <div class="row" style="margin-bottom:8px"><input type="file" id="impFile" accept=".json,application/json,.txt,.md"></div>
-    <textarea class="big" id="impText" placeholder="여기에 붙여넣기"></textarea>
+    <div class="hint" style="margin:0 0 8px">JSON 파일을 열거나, JSON 또는 AI 응답 전체를 붙여넣으세요. 코드블록 안의 JSON을 자동으로 찾아요.</div>
+    <div class="row" style="margin-bottom:8px">
+      ${FS_OK?'<button class="fx0" id="impPick">파일 열기…</button>':''}
+      <input type="file" id="impFile" accept=".json,application/json,.txt,.md" ${FS_OK?'style="display:none"':''}>
+    </div>
+    <textarea class="big" id="impText" placeholder="여기에 붙여넣기">${esc(text||'')}</textarea>
     <div id="impDiff" style="margin-top:10px"></div>`,
-    [['닫기',closeModal],['변경점 확인',checkImport],['적용',applyImport,'pri']]);
-  $('#impFile').onchange=async e=>{ const f=e.target.files[0]; if(f){ $('#impText').value=await f.text(); checkImport(); } };
-};
-let pendingImport=null;
+    [['닫기',closeModal],['변경점 다시 확인',()=>checkImport()],['선택 항목 적용',applyImport,'pri']]);
+  $('#impFile').onchange=async e=>{ const f=e.target.files[0]; if(f){ pendingHandle=null; $('#impText').value=await f.text(); checkImport(); } };
+  const pick=$('#impPick'); if(pick) pick.onclick=openFilePicker;
+  $('#impText').oninput=()=>{ pendingImport=null; };
+  if(text) checkImport();
+}
+$('#importBtn').onclick=()=>{ pendingHandle=null; openImport(''); };
+let pendingImport=null, pendingDiff=[];
 function checkImport(){
-  const box=$('#impDiff'); pendingImport=null;
+  const box=$('#impDiff'); pendingImport=null; pendingDiff=[];
   try{
     const raw=extractJSON($('#impText').value); const np=normalize(raw);
     if(!np.nodes.length && !np.resources.length) throw new Error('노드나 재화가 없는 데이터예요');
-    const d=diff(normalize(P),np); pendingImport=np;
+    const d=diff(normalize(P),np); pendingImport=np; pendingDiff=d;
     const sym={a:'+',r:'−',c:'~'};
-    box.innerHTML=`<div class="lbl">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(노드 ${np.nodes.length} · 재화 ${np.resources.length} · 시대 ${np.eras.length})</span></div>
-      <div class="diff">${d.map(([k,l,id,info])=>`<div class="${k}">${sym[k]} [${l}] ${esc(id)} ${esc(info)}</div>`).join('')||'<span class="muted">현재와 동일해요</span>'}</div>`;
+    box.innerHTML=`<div class="row"><div class="lbl" style="margin:0">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(불러올 데이터: 노드 ${np.nodes.length} · 재화 ${np.resources.length} · 시대 ${np.eras.length})</span></div>
+        ${d.length?`<label class="fx0" style="display:flex;gap:6px;align-items:center;color:var(--tx2)"><input type="checkbox" id="dAll" checked style="width:auto">전체 선택</label>`:''}</div>
+      <div class="diff">${d.map(([k,coll,id,info,label],i)=>`<label class="${k}"><input type="checkbox" class="dchk" data-i="${i}" checked>
+        <span>${sym[k]} [${esc(label)}] ${esc(id)} ${esc(info)}</span></label>`).join('')||'<span class="muted">현재와 동일해요</span>'}</div>
+      ${d.length?'<div class="hint">체크한 항목만 적용돼요. 전부 체크하면 통째로 교체됩니다.</div>':''}`;
+    const all=$('#dAll'); if(all) all.onchange=e=>document.querySelectorAll('.dchk').forEach(c=>c.checked=e.target.checked);
     return true;
   }catch(e){ box.innerHTML=`<div style="color:var(--err)">${esc(e.message)}</div>`; return false; }
 }
+function mergePick(cur,imp,picks){
+  const out=JSON.parse(JSON.stringify(cur)), cp=x=>JSON.parse(JSON.stringify(x));
+  for(const [k,coll,id,,,idx] of picks){
+    if(coll==='meta'){ out.meta={...imp.meta}; continue; }
+    const list=out[coll], src=imp[coll].find(x=>x.id===id), at=list.findIndex(x=>x.id===id);
+    if(k==='r'){ if(at>=0) list.splice(at,1); }
+    else if(!src) continue;
+    else if(at>=0) list[at]=cp(src);
+    else list.splice(Math.min(idx<0?list.length:idx,list.length),0,cp(src));
+  }
+  return out;
+}
 function applyImport(){
   if(!pendingImport && !checkImport()) return;
-  snapshot(); P=pendingImport; pendingImport=null; if(sel&&!node(sel)) sel=null; fitted=false;
-  changed(true); renderAll(); closeModal(); toast('불러왔어요 — 되돌리려면 Ctrl+Z');
+  if(!pendingImport) return;
+  const boxes=[...document.querySelectorAll('.dchk')];
+  const picks=boxes.filter(c=>c.checked).map(c=>pendingDiff[+c.dataset.i]).filter(Boolean);
+  if(boxes.length && !picks.length){ toast('적용할 항목을 하나 이상 선택하세요'); return; }
+  const full = !boxes.length || picks.length===boxes.length;
+  snapshot();
+  P = normalize(full ? pendingImport : mergePick(normalize(P),pendingImport,picks));
+  const n=picks.length; pendingImport=null; pendingDiff=[];
+  pruneSel(); fitted=false;
+  changed(true); renderAll(); closeModal();
+  if(pendingHandle){ linkHandle(pendingHandle,!full); pendingHandle=null; }
+  toast(full?'전체를 불러왔어요 — 되돌리려면 Ctrl+Z':`${n}개 변경을 적용했어요 — 되돌리려면 Ctrl+Z`);
 }
 
 /* ================= 전체 렌더 ================= */
 let rTimer=null;
 function scheduleRender(){ clearTimeout(rTimer); rTimer=setTimeout(()=>{ const is=validate(); renderGraph(is); renderTop(is); if(tab==='nodes') renderLeft(is); },120); }
-function renderAll(){ const is=validate(); renderGraph(is); renderTop(is); renderLeft(is); renderRight(); }
+function renderAll(){ const is=validate(); renderGraph(is); renderTop(is); renderLeft(is); renderRight(); renderFile(); }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{ tab=b.dataset.tab; renderLeft(validate()); });
 $('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
 window.addEventListener('keydown',e=>{
   const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); e.shiftKey?saveFileAs():saveFile(); return; }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!typing){ e.preventDefault(); e.shiftKey?redo():undo(); }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'&&!typing){ e.preventDefault(); redo(); }
   if(e.key==='Escape'){ if($('#modal').classList.contains('on')) closeModal(); else if(!typing) select(null); }
   if(!typing && (e.key==='n'||e.key==='N') && !e.ctrlKey && !e.metaKey){ e.preventDefault(); addNode(); }
   if(!typing && e.key==='f' && !e.ctrlKey && !e.metaKey) fit();
+  if(!typing && (e.key==='a'||e.key==='A') && (e.ctrlKey||e.metaKey)){ e.preventDefault();
+    selSet=new Set(P.nodes.filter(n=>!eraFilter||n.era===eraFilter).map(n=>n.id)); sel=[...selSet].pop()||null; renderAll(); }
 });
+window.addEventListener('beforeunload',e=>{ if(dirty&&fileHandle&&!autoSave){ e.preventDefault(); e.returnValue=''; } });
 window.addEventListener('resize',()=>applyView());
 
 load(); snapshot(); renderAll();
