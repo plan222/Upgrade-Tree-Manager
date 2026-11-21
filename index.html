@@ -73,8 +73,10 @@ textarea{resize:vertical;min-height:54px}
 .prev{background:#11131a;border:1px dashed var(--line2);border-radius:6px;padding:7px 9px;margin-top:6px;color:var(--acc2)}
 table.cost{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;margin-top:6px}
 table.cost td,table.cost th{padding:2px 6px;border-bottom:1px solid #262a33;text-align:right}
-table.cost th{color:var(--tx3);font-weight:400}
+table.cost th{color:var(--tx3);font-weight:400;position:sticky;top:0;background:var(--panel);z-index:1}
 table.cost td:first-child,table.cost th:first-child{text-align:left}
+table.cost input{padding:2px 5px;font-size:11.5px;font-family:var(--mono);text-align:right}
+.costwrap{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:7px;padding:0 6px 4px;margin-top:6px}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:2px 9px;font-size:12px;cursor:pointer}
 .chip:hover{border-color:var(--acc)}
@@ -185,6 +187,7 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
       <div class="tabs" id="tabs">
         <button data-tab="nodes" class="on">노드</button>
         <button data-tab="res">재화</button>
+        <button data-tab="stat">수치</button>
         <button data-tab="proj">프로젝트</button>
       </div>
       <div id="leftBody" style="flex:1"></div>
@@ -220,9 +223,10 @@ table.cost td:first-child,table.cost th:first-child{text-align:left}
 <script>
 'use strict';
 /* ================= 데이터 ================= */
-const SCHEMA = 'upgrade-tree/2';
+const SCHEMA = 'upgrade-tree/3';
 const STATUS = {idea:'아이디어', wip:'작업 중', done:'구현됨', cut:'폐기'};
 const STATUS_COLOR = {idea:'#7a8295', wip:'#6cb4ff', done:'#5fd39a', cut:'#5a4350'};
+const TGT_SUFFIX = {production:'생산량', value:'가치', storage:'저장량'};
 const EFFECT_TYPES = {
   produce:'생산 (+초당)', multiply:'배율 (×)', add:'가산 (+)', unlock:'기능 해금', custom:'기타'
 };
@@ -244,6 +248,14 @@ function sample(){
       {id:'wood', name:'나무', manual:true, note:'바닥에서 클릭해 줍기 (유한)'},
       {id:'stone', name:'돌', manual:true, note:'바닥에서 클릭해 줍기 (유한)'},
       {id:'population', name:'인구', manual:false, note:''}
+    ],
+    stats: [
+      {id:'food.value', name:'식량 가치', note:''},
+      {id:'food.storage', name:'식량 저장량', note:''},
+      {id:'gather.speed', name:'채집 속도', note:'클릭 채집 쿨다운'},
+      {id:'gather.amount', name:'클릭당 채집량', note:''},
+      {id:'explore.radius', name:'활동 반경', note:'돌아다닐 수 있는 거리'},
+      {id:'research.speed', name:'연구 속도', note:''}
     ],
     nodes: [
       N('fire','불',['원시'],1,[['wood',1,1],['stone',1,1]],[],[],[{type:'unlock',target:'campfire',value:1,perLevel:false}],
@@ -270,33 +282,57 @@ function sample(){
   };
   function N(id,name,tags,maxLevel,cost,all,any,effects,description,designNote,status){
     return {id,name,tags,status,maxLevel,
-      cost:cost.map(([resource,base,growth])=>({resource,base,growth})),
+      cost:cost.map(([resource,base,growth])=>({resource,values:[...Array(Math.max(1,maxLevel))].map((_,i)=>Math.ceil(base*Math.pow(growth||1,i)))})),
       requires:{all,any},effects,description,designNote};
   }
 }
 function blankProject(){
-  return {schema:SCHEMA,meta:{name:'새 프로젝트',concept:''},resources:[{id:'gold',name:'골드',manual:true,note:''}],nodes:[]};
+  return {schema:SCHEMA,meta:{name:'새 프로젝트',concept:''},resources:[{id:'gold',name:'골드',manual:true,note:''}],stats:[],nodes:[]};
 }
 function normalize(p){
   p = p && typeof p==='object' ? p : {};
   const out = {schema:SCHEMA, meta:Object.assign({name:'이름 없음',concept:''}, p.meta||{}),
-    resources:[], nodes:[]};
+    resources:[], stats:[], nodes:[]};
   for(const r of (p.resources||[])) out.resources.push({id:String(r.id??''),name:String(r.name??r.id??''),manual:!!r.manual,note:String(r.note??'')});
+  const hadStats = Array.isArray(p.stats);
+  for(const t of (p.stats||[])) out.stats.push({id:String(t.id??''),name:String(t.name??t.id??''),note:String(t.note??'')});
   // upgrade-tree/1 → /2 : 시대(eras)는 없앴다. 옛 데이터의 era는 태그로 옮긴다.
   const eraName=new Map((p.eras||[]).map(e=>[String(e.id??''),String(e.name??e.id??'')]));
   for(const n of (p.nodes||[])){
     const req = n.requires||{};
+    const ml = Number.isFinite(+n.maxLevel)&&+n.maxLevel>=1 ? Math.floor(+n.maxLevel) : 1;
     out.nodes.push({
       id:String(n.id??''), name:String(n.name??n.id??''), status:STATUS[n.status]?n.status:'idea',
-      maxLevel: Number.isFinite(+n.maxLevel)&&+n.maxLevel>0 ? +n.maxLevel : 1,
-      cost:(n.cost||[]).map(c=>({resource:String(c.resource??''),base:num(c.base),growth:c.growth==null?1:num(c.growth)})),
+      maxLevel: ml,
+      cost:(n.cost||[]).map(c=>normCost(c,ml)),
       requires:{all:(req.all||[]).map(normCond),any:(req.any||[]).map(normCond)},
       effects:(n.effects||[]).map(e=>({type:EFFECT_TYPES[e.type]?e.type:'custom',target:String(e.target??''),value:e.value??0,perLevel:!!e.perLevel})),
       description:String(n.description??''), designNote:String(n.designNote??''), tags:migTags(n,eraName),
       pos: n.pos && Number.isFinite(+n.pos.x) && Number.isFinite(+n.pos.y) ? {x:Math.round(+n.pos.x),y:Math.round(+n.pos.y)} : null
     });
   }
+  if(!hadStats) autoStats(out); // upgrade-tree/2 → /3 : 효과 대상 중 재화가 아닌 것은 "수치"로 등록
   return out;
+}
+// upgrade-tree/2 → /3 : cost는 { base, growth } 대신 레벨별 값 배열을 쓴다
+function normCost(c,ml){
+  c = c && typeof c==='object' ? c : {};
+  const v = Array.isArray(c.values)&&c.values.length
+    ? c.values.map(num)
+    : [...Array(Math.max(1,ml))].map((_,i)=>Math.ceil(num(c.base)*Math.pow(c.growth==null?1:(num(c.growth)||1),i)));
+  return {resource:String(c.resource??''), values:fitLevels(v,ml)};
+}
+function fitLevels(v,ml){ const out=v.slice(0,Math.max(1,ml)); while(out.length<Math.max(1,ml)) out.push(out.length?out[out.length-1]:0); return out; }
+function autoStats(out){
+  const have=new Set(out.stats.map(s=>s.id));
+  const rName=new Map(out.resources.map(r=>[r.id,r.name]));
+  const label=t=>{ const [b,...rest]=String(t).split('.'), k=rest.join('.');
+    return rName.has(b) ? rName.get(b)+(k?' '+(TGT_SUFFIX[k]||k):'') : t; };
+  for(const n of out.nodes) for(const e of n.effects){
+    const t=e.target;
+    if(!t || have.has(t) || (e.type!=='multiply' && e.type!=='add')) continue;
+    have.add(t); out.stats.push({id:t,name:label(t),note:''});
+  }
 }
 function migTags(n,eraName){
   const tags=Array.isArray(n.tags)?n.tags.map(String):[];
@@ -484,12 +520,22 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const node=id=>P.nodes.find(n=>n.id===id);
 const res=id=>P.resources.find(r=>r.id===id);
+const stat=id=>P.stats.find(s=>s.id===id);
 const statusColor=st=>STATUS_COLOR[st]||'#666';
 const allTags=()=>[...new Set(P.nodes.flatMap(n=>n.tags))].sort((a,b)=>a.localeCompare(b,'ko'));
 const matchFilter=n=> !listFilter ? true
   : listFilter.startsWith('st:') ? n.status===listFilter.slice(3)
   : n.tags.includes(listFilter.slice(4));
 const resName=id=>(res(id)||{}).name||id;
+const statName=id=>(stat(id)||{}).name||id;
+function targetLabel(t){
+  if(stat(t)) return statName(t);
+  const parts=String(t).split('.'), b=parts.shift(), rest=parts.join('.');
+  if(res(b)) return resName(b)+(rest?' '+(TGT_SUFFIX[rest]||rest):'');
+  return '';
+}
+const statUsers=id=>P.nodes.filter(n=>n.effects.some(e=>e.target===id));
+const derivedStats=()=>P.resources.flatMap(r=>[r.id+'.production',r.id+'.value',r.id+'.storage']).filter(t=>!stat(t));
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1800)}
 function fmt(n){ if(!Number.isFinite(n)) return String(n); const a=Math.abs(n);
   if(a>=1e15) return n.toExponential(2);
@@ -498,7 +544,16 @@ function fmt(n){ if(!Number.isFinite(n)) return String(n); const a=Math.abs(n);
   if(a>=1e6) return (n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M';
   if(a>=1e4) return (n/1e3).toFixed(1).replace(/\.?0+$/,'')+'K';
   return Math.round(n*100)/100+''; }
-function costAt(c,lvl){ return Math.ceil(c.base*Math.pow(c.growth||1,lvl-1)); }
+function costAt(c,lvl){ const v=c.values||[]; if(!v.length) return 0; return num(v[Math.min(Math.max(1,Math.floor(lvl)),v.length)-1]); }
+function costSum(n,c){ const ml=levelCount(n); let t=0; for(let l=1;l<=ml;l++) t+=costAt(c,l); return t; }
+const levelCount=n=>Math.max(1,Math.floor(num(n.maxLevel))||1);
+function syncCost(n,truncate){ // maxLevel이 바뀌면 레벨별 값 개수를 맞춘다
+  const ml=levelCount(n);
+  for(const c of n.cost){
+    while(c.values.length<ml) c.values.push(c.values.length?c.values[c.values.length-1]:0);
+    if(truncate) c.values=c.values.slice(0,ml);
+  }
+}
 function nodeDeps(n){ return [...n.requires.all,...n.requires.any].filter(c=>'node' in c).map(c=>c.node); }
 function uniqueId(base){ let id=base,i=2; const ids=new Set(P.nodes.map(n=>n.id)); while(ids.has(id)) id=base+'_'+(i++); return id; }
 function slug(s){ return String(s).trim().toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,''); }
@@ -515,12 +570,12 @@ function validate(){
   for(const n of P.nodes){ if(!n.id) add('e','ID가 비어 있는 노드가 있어요',null); ids.set(n.id,(ids.get(n.id)||0)+1); }
   for(const [id,c] of ids) if(c>1) add('e',`노드 ID "${id}"가 ${c}번 중복돼요`,id);
   const rids=new Set(P.resources.map(r=>r.id));
-  const consumed=new Set(), produced=new Set();
+  const consumed=new Set(), produced=new Set(), usedStats=new Set();
   for(const n of P.nodes){
     for(const c of n.cost){
       if(!rids.has(c.resource)) add('e',`비용에 없는 재화 "${c.resource}"`,n.id); else consumed.add(c.resource);
-      if(c.base<=0) add('w',`${resName(c.resource)} 기본 비용이 0 이하`,n.id);
-      if(n.maxLevel>1 && (c.growth||1)<1) add('w',`${resName(c.resource)} 증가율이 1보다 작아 레벨이 오를수록 싸져요`,n.id);
+      if(c.values.some(v=>v<=0)) add('w',`${resName(c.resource)} 비용이 0 이하인 레벨이 있어요`,n.id);
+      else if(n.maxLevel>1 && c.values.some((v,i)=>i&&v<c.values[i-1])) add('w',`${resName(c.resource)} 비용이 중간에 싸지는 레벨이 있어요`,n.id);
     }
     for(const c of [...n.requires.all,...n.requires.any]){
       const t=condType(c);
@@ -534,6 +589,10 @@ function validate(){
     }
     for(const e of n.effects){
       if(e.type==='produce'){ if(!rids.has(e.target)) add('e',`생산 효과의 대상 "${e.target}"이 재화가 아니에요`,n.id); else produced.add(e.target); }
+      else if((e.type==='multiply'||e.type==='add') && e.target){
+        if(stat(e.target)) usedStats.add(e.target);
+        else add('w',`효과 대상 "${e.target}"이 수치 목록에 없어요 (수치 탭에서 등록하세요)`,n.id);
+      }
       if(!e.target && e.type!=='custom') add('w','효과 대상이 비어 있어요',n.id);
     }
     const refs=[...(n.description||'').matchAll(/\{value(\d*)\}/g)].map(m=>m[1]?+m[1]:1);
@@ -555,6 +614,13 @@ function validate(){
   for(const r of P.resources){
     if(!r.manual && !produced.has(r.id)) add('w',`재화 "${r.name}"를 생산하는 노드가 없어요 (직접 수집이면 재화 탭에서 체크)`,null);
     if(!consumed.has(r.id)) add('i',`재화 "${r.name}"를 비용으로 쓰는 노드가 없어요`,null);
+  }
+  // 수치
+  const sc=new Map(); for(const t of P.stats) sc.set(t.id,(sc.get(t.id)||0)+1);
+  for(const [id,c] of sc) if(c>1) add('e',`수치 ID "${id}"가 중복돼요`,null);
+  for(const t of P.stats){
+    if(!t.id) add('e','ID가 비어 있는 수치가 있어요',null);
+    else if(!usedStats.has(t.id)) add('i',`수치 "${t.name}"를 바꾸는 노드가 없어요`,null);
   }
   return out;
 }
@@ -614,7 +680,7 @@ function nodesSVG(L,rel,errIds){
   let s='';
   for(const n of P.nodes){ const p=L.pos.get(n.id); if(!p) continue;
     const cls=['gnode', selSet.has(n.id)?'sel':'', errIds.has(n.id)?'err':'', n.status, rel&&!rel.has(n.id)?'dim':''].join(' ');
-    const costTxt = n.cost.map(c=>`${resName(c.resource)} ${fmt(c.base)}`).join(' · ') || '무료';
+    const costTxt = n.cost.map(c=>`${resName(c.resource)} ${fmt(costAt(c,1))}`).join(' · ') || '무료';
     const extra = [...n.requires.all,...n.requires.any].some(c=>!('node' in c)) ? ' · +조건' : '';
     const lv = n.maxLevel>1?` ×${n.maxLevel}`:'';
     const st = n.status==='done'?'✓ ':n.status==='wip'?'◐ ':'';
@@ -783,13 +849,33 @@ function renderLeft(issues){
     el.querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.resources.splice(+b.dataset.rdel,1); changed(true); renderAll(); }));
     $('#addRes').onclick=()=>{ let id='res',k=1; while(res(id+k)) k++; P.resources.push({id:id+k,name:'새 재화',manual:false,note:''}); changed(true); renderAll(); };
   }
+  if(tab==='stat'){
+    el.innerHTML=`<div class="pad"><div class="lbl">수치 목록</div><div class="hint" style="margin-bottom:8px">업그레이드가 올리고 내리는 값이에요 (데미지·공격 속도처럼 재화가 아닌 것). <b>배율·가산 효과의 대상은 여기 등록된 수치에서만</b> 고를 수 있어요. 재화의 생산량·가치·저장량을 올리고 싶으면 아래 "재화에서 가져오기"로 등록하세요.</div>
+      <div class="lst">${P.stats.map((t,i)=>`<div style="border:1px solid var(--line);border-radius:8px;padding:8px">
+        <div class="row"><input class="mono" data-sid="${i}" value="${esc(t.id)}" placeholder="damage"><input data-sf="name" data-si="${i}" value="${esc(t.name)}" placeholder="이름"><button class="x fx0" data-sdel="${i}">✕</button></div>
+        <div class="row" style="margin-top:5px"><input data-sf="note" data-si="${i}" value="${esc(t.note)}" placeholder="메모 (기본값·단위 등)"></div>
+        <div class="hint" style="margin:5px 0 0">바꾸는 노드 ${statUsers(t.id).length}개</div>
+      </div>`).join('')||'<div class="muted">아직 수치가 없어요. 효과 대상에 새 이름을 적으면 거기서 바로 등록할 수도 있어요.</div>'}</div>
+      <button class="add" id="addStat">+ 수치 추가</button>
+      <div class="hint">ID는 영문·숫자·_·. 만 써요 (예: <span class="mono">damage</span>, <span class="mono">attack.speed</span>). ID를 바꾸면 효과의 대상도 함께 바뀝니다.</div>
+      <div class="lbl" style="margin-top:16px">재화에서 가져오기</div>
+      ${derivedStats().length?`<div class="row"><select id="statFromRes">${derivedStats().map(t=>`<option value="${esc(t)}">${esc(targetLabel(t))} (${esc(t)})</option>`).join('')}</select><button class="fx0" id="addStatRes">추가</button></div>
+      <div class="hint">재화의 생산량·가치·저장량을 올리는 효과를 쓰려면 여기서 수치로 등록하세요.</div>`:'<div class="hint" style="margin:0">재화 기반 수치는 모두 등록돼 있어요.</div>'}</div>`;
+    el.querySelectorAll('[data-sf]').forEach(inp=>inp.addEventListener('input',()=>{
+      const t=P.stats[+inp.dataset.si]; t[inp.dataset.sf]=inp.value; changed(); }));
+    el.querySelectorAll('[data-sid]').forEach(inp=>inp.addEventListener('change',()=>renameStat(+inp.dataset.sid,inp)));
+    el.querySelectorAll('[data-sdel]').forEach(b=>b.onclick=()=>confirmBtn(b,()=>{ P.stats.splice(+b.dataset.sdel,1); changed(true); renderAll(); }));
+    $('#addStat').onclick=()=>{ let id='stat',k=1; while(stat(id+k)) k++; P.stats.push({id:id+k,name:'새 수치',note:''}); changed(true); renderAll(); };
+    const afr=$('#addStatRes'); if(afr) afr.onclick=()=>{ const v=$('#statFromRes').value; if(!v||stat(v)) return;
+      P.stats.push({id:v,name:targetLabel(v)||v,note:''}); changed(true); renderAll(); toast(`"${targetLabel(v)||v}"를 수치로 등록했어요`); };
+  }
   if(tab==='proj'){
     el.innerHTML=`<div class="pad">
       <div class="lbl">프로젝트 이름</div><input id="pName" value="${esc(P.meta.name)}">
       <div class="lbl">게임 컨셉 (AI에게 함께 전달돼요)</div><textarea id="pConcept" style="min-height:160px">${esc(P.meta.concept)}</textarea>
       <div class="hint">장르·톤·핵심 루프·피하고 싶은 것 등을 적어두면 AI 제안 품질이 올라가요.</div>
       <div class="lbl" style="margin-top:18px">통계</div>
-      <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 최대 단계 ${lastLayout?lastLayout.cols:0} · 태그 ${new Set(P.nodes.flatMap(n=>n.tags)).size}</div>
+      <div class="muted">노드 ${P.nodes.length} · 재화 ${P.resources.length} · 수치 ${P.stats.length} · 최대 단계 ${lastLayout?lastLayout.cols:0} · 태그 ${new Set(P.nodes.flatMap(n=>n.tags)).size}</div>
       <div class="lbl" style="margin-top:18px">로컬 파일</div>
       <div class="muted" id="pFile"></div>
       <div class="row" style="margin-top:6px"><button id="pSave">${FS_OK?'파일에 저장 (Ctrl+S)':'JSON 다운로드'}</button><button id="pOpen">파일 열기</button></div>
@@ -826,6 +912,13 @@ function renameRes(i,inp){
     n.effects.forEach(e=>{ if(e.target===old) e.target=nv; else if(e.target.startsWith(old+'.')) e.target=nv+e.target.slice(old.length); }); }
   r.id=nv; changed(true); renderAll();
 }
+function renameStat(i,inp){
+  const t=P.stats[i], nv=String(inp.value).trim().toLowerCase().replace(/[^a-z0-9_.]+/g,'_').replace(/^[_.]+|[_.]+$/g,'');
+  if(!nv||(nv!==t.id&&stat(nv))){ toast('비었거나 중복된 ID예요'); inp.value=t.id; return; }
+  const old=t.id; if(old===nv){ inp.value=nv; return; }
+  for(const n of P.nodes) n.effects.forEach(e=>{ if(e.target===old) e.target=nv; });
+  t.id=nv; changed(true); renderAll();
+}
 const rank=l=>({e:0,w:1,i:2})[l]; const lvColor=l=>({e:'var(--err)',w:'var(--warn)',i:'var(--info)'})[l];
 function confirmBtn(b,fn){
   if(b.dataset.armed){ fn(); return; }
@@ -848,13 +941,70 @@ function addNode(){
   const base = sel?node(sel):null;
   const id=uniqueId('new_node');
   const n={id,name:'새 업그레이드',status:'idea',maxLevel:1,
-    cost:P.resources[0]?[{resource:P.resources[0].id,base:10,growth:1}]:[],
+    cost:P.resources[0]?[{resource:P.resources[0].id,values:[10]}]:[],
     requires:{all:base?[{node:base.id,minLevel:1}]:[],any:[]},effects:[],description:'',designNote:'',tags:base?base.tags.slice():(listFilter.startsWith('tag:')?[listFilter.slice(4)]:[]),pos:null};
   if(base&&base.pos) n.pos={x:base.pos.x+NW+GX,y:base.pos.y};
   P.nodes.push(n); sel=id; selSet=new Set([id]); changed(true); renderAll(); centerOn(id);
   setTimeout(()=>{ const f=document.querySelector('#right [data-p="name"]'); if(f){ f.focus(); f.select(); } },0);
   if(base) toast(`"${base.name}"를 요구하는 새 노드를 만들었어요`);
 }
+const resOpts=v=>P.resources.map(r=>`<option value="${esc(r.id)}" ${r.id===v?'selected':''}>${esc(r.name)} (${esc(r.id)})</option>`).join('') + (res(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
+/* 효과 대상: 수치 목록에서만 고른다 (생산은 재화, 해금·기타는 자유 입력) */
+function statOpts(v){
+  let s=`<option value="" ${v?'':'selected'}>(대상 고르기)</option>`;
+  s+=P.stats.length
+    ? `<optgroup label="수치">${P.stats.map(t=>`<option value="${esc(t.id)}" ${t.id===v?'selected':''}>${esc(t.name)} (${esc(t.id)})</option>`).join('')}</optgroup>`
+    : '';
+  if(v&&!stat(v)) s+=`<option value="${esc(v)}" selected>⚠ ${esc(v)} (수치 아님)</option>`;
+  s+=`<option value="__new">＋ 새 수치 만들기…</option>`;
+  return s;
+}
+function tgtCtl(e,i){
+  const p=`effects.${i}.target`;
+  if(e.type==='produce') return `<select data-p="${p}">${resOpts(e.target)}</select>`;
+  if(e.type==='unlock') return `<input class="mono" data-p="${p}" value="${esc(e.target)}" placeholder="해금할 기능 이름 (예: building_grid)">`;
+  if(e.type==='custom') return `<input class="mono" data-p="${p}" value="${esc(e.target)}" placeholder="자유 입력">`;
+  return `<select class="mono" data-statsel="${i}">${statOpts(e.target)}</select>`;
+}
+/* 레벨당 체크가 무슨 뜻인지 한 줄로 */
+function effectHint(n,e){
+  if(e.type==='unlock'||e.type==='custom') return '';
+  const v=Number(e.value); if(!Number.isFinite(v)) return '';
+  const ml=levelCount(n), unit=e.type==='produce'?'/초':'';
+  const sign=e.type==='multiply'?'×':'+';
+  const at=l=>e.type==='multiply'?fmt(Math.pow(v,l)):fmt(v*l);
+  if(!e.perLevel) return `레벨과 상관없이 ${sign}${fmt(v)}${unit} 한 번만`;
+  if(ml<=1) return `레벨당 ${sign}${fmt(v)}${unit} (최대 Lv가 1이라 ${sign}${fmt(v)}${unit}로 끝)`;
+  return `레벨당 쌓임 — Lv1 ${sign}${at(1)}${unit} · Lv${ml} ${sign}${at(ml)}${unit}`;
+}
+/* 비용: 레벨마다 직접 입력 */
+function costBoxHTML(n){
+  const ml=levelCount(n);
+  if(!n.cost.length) return `<div class="muted" style="font-size:12px">비용 없음 (무료)</div><button class="add" data-add="cost">+ 비용 재화</button>`;
+  const rows=[...Array(ml)].map((_,l)=>`<tr><td>${l+1}</td>${n.cost.map((c,i)=>
+      `<td><input type="number" data-p="cost.${i}.values.${l}" data-t="num" value="${c.values[l]??0}"></td>`).join('')}</tr>`).join('');
+  return `<div class="lst">${n.cost.map((c,i)=>`<div class="row"><select data-p="cost.${i}.resource">${resOpts(c.resource)}</select><button class="x fx0" data-del="cost.${i}">✕</button></div>`).join('')}</div>
+    <button class="add" data-add="cost">+ 비용 재화</button>
+    <div class="costwrap"><table class="cost"><tr><th>Lv</th>${n.cost.map(c=>`<th>${esc(resName(c.resource))}</th>`).join('')}</tr>${rows}</table></div>
+    <div class="hint" id="costSum"></div>
+    ${ml>1?`<div class="row" style="margin-top:8px">
+      <span class="fx0 muted" style="font-size:11px">일괄 채우기</span>
+      ${n.cost.length>1?`<select class="fx0" id="fillRes" style="width:86px">${n.cost.map((c,i)=>`<option value="${i}">${esc(resName(c.resource))}</option>`).join('')}</select>`:''}
+      <input type="number" id="fillBase" value="${n.cost[0].values[0]||10}" title="Lv1 값" style="min-width:0">
+      <input type="number" step="0.01" id="fillG" value="1.5" title="레벨당 배율" style="min-width:0">
+      <button class="fx0" id="fillGo">채우기</button></div>
+    <div class="hint" style="margin-top:3px">Lv1 값 × 배율로 한 번 계산해 넣어줘요. 넣은 뒤에는 칸마다 자유롭게 고치면 돼요.</div>`:''}`;
+}
+function bindFill(n){
+  const go=$('#fillGo');
+  if(go) go.onclick=()=>{
+    const ci=$('#fillRes')?+$('#fillRes').value:0, b=num($('#fillBase').value), g=num($('#fillG').value)||1, c=n.cost[ci];
+    if(!c) return;
+    c.values=[...Array(levelCount(n))].map((_,i)=>Math.ceil(b*Math.pow(g,i)));
+    changed(true); refreshCostBox(n); toast(`${resName(c.resource)} 비용을 채웠어요`);
+  };
+}
+function refreshCostBox(n){ const box=$('#costBox'); if(!box) return; box.innerHTML=costBoxHTML(n); bindPanel(box,n); bindFill(n); renderDerived(); }
 function renderRight(){
   const el=$('#right');
   if(selSet.size>1){ renderBulk(el); return; }
@@ -862,7 +1012,6 @@ function renderRight(){
   if(!n){
     el.innerHTML=`<div class="empty">노드를 선택하세요<br><br><span style="font-size:12px">그래프나 목록에서 클릭 · 빈 곳 드래그로 화면 이동 · 휠로 확대/축소<br>노드를 끌면 위치가 고정되고, 오른쪽 점을 끌면 의존성이 연결돼요<br>Ctrl(⌘)+클릭으로 여러 개를 골라 한꺼번에 바꿀 수 있어요<br><br>노드를 선택한 채 <b>+ 노드</b>를 누르면<br>그 노드를 요구하는 다음 노드가 생겨요</span></div>`; return;
   }
-  const resOpts=v=>P.resources.map(r=>`<option value="${esc(r.id)}" ${r.id===v?'selected':''}>${esc(r.name)} (${esc(r.id)})</option>`).join('') + (res(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
   const nodeOpts=v=>P.nodes.filter(m=>m.id!==n.id).map(m=>`<option value="${esc(m.id)}" ${m.id===v?'selected':''}>${esc(m.name)} (${esc(m.id)})</option>`).join('') + (node(v)||!v?'':`<option value="${esc(v)}" selected>⚠ ${esc(v)}</option>`);
   const condRows=(kind)=>n.requires[kind].map((c,i)=>{ const t=condType(c), p=`requires.${kind}.${i}`;
     let body='';
@@ -870,8 +1019,12 @@ function renderRight(){
     if(t==='resource') body=`<select data-p="${p}.resource">${resOpts(c.resource)}</select><input type="number" data-p="${p}.reached" data-t="num" value="${c.reached}" title="누적/보유 도달량" style="width:80px" class="fx0">`;
     if(t==='custom') body=`<input data-p="${p}.custom" value="${esc(c.custom)}" placeholder="예: 외계인 탐사 1회">`;
     return `<div class="row"><select class="fx0" style="width:74px" data-ctype="${p}"><option value="node" ${t==='node'?'selected':''}>노드</option><option value="resource" ${t==='resource'?'selected':''}>재화 도달</option><option value="custom" ${t==='custom'?'selected':''}>기타</option></select>${body}<button class="x fx0" data-del="${p}">✕</button></div>`; }).join('');
-  const targets=[...P.resources.flatMap(r=>[r.id,r.id+'.production',r.id+'.value',r.id+'.storage']),
-    ...new Set(P.nodes.flatMap(m=>m.effects.map(e=>e.target)).filter(Boolean))];
+  const tgtInfo=(e,i)=>{
+    if(e.type==='unlock'||e.type==='custom'||!e.target) return '';
+    if(e.type==='produce') return res(e.target)?'':`<div class="hint" style="margin:4px 0 0;color:var(--err)">재화가 아니에요 — 생산 효과의 대상은 재화여야 해요</div>`;
+    if(stat(e.target)) return '';
+    return `<div class="row" style="margin-top:4px"><span class="fx0 hint" style="margin:0;color:var(--warn)">수치 목록에 없는 대상</span><button class="ghost fx0" data-regstat="${esc(e.target)}">＋ 수치로 등록</button></div>`;
+  };
   const dependents=P.nodes.filter(m=>nodeDeps(m).includes(n.id));
   el.innerHTML=`
   <div class="sec">
@@ -885,13 +1038,8 @@ function renderRight(){
       ${n.pos?'<button class="ghost fx0" id="unpinNode" title="자동 정렬 위치로 되돌리기">자동 정렬로</button>':''}</div>
   </div>
   <div class="sec">
-    <h3>비용 <small>Lv n 가격 = 기본 × 증가율^(n−1)</small><span class="sp"></span>${n.maxLevel>1?'<button class="ghost" id="curveBtn">곡선 보기</button>':''}</h3>
-    <div class="lst">${n.cost.map((c,i)=>`<div class="row"><select data-p="cost.${i}.resource">${resOpts(c.resource)}</select>
-      <input type="number" data-p="cost.${i}.base" data-t="num" value="${c.base}" title="기본 비용" style="width:76px" class="fx0">
-      <input type="number" step="0.01" data-p="cost.${i}.growth" data-t="num" value="${c.growth}" title="레벨당 증가율" style="width:64px" class="fx0">
-      <button class="x fx0" data-del="cost.${i}">✕</button></div>`).join('')}</div>
-    <button class="add" data-add="cost">+ 비용 재화</button>
-    <div id="costPrev"></div>
+    <h3>비용 <small>레벨마다 직접 입력</small><span class="sp"></span>${n.maxLevel>1?'<button class="ghost" id="curveBtn">곡선 보기</button>':''}</h3>
+    <div id="costBox">${costBoxHTML(n)}</div>
   </div>
   <div class="sec">
     <h3>해금 조건 · 모두 충족 <small>AND</small></h3>
@@ -904,11 +1052,13 @@ function renderRight(){
     <div class="lst">${n.effects.map((e,i)=>`<div style="border:1px solid var(--line);border-radius:7px;padding:6px">
       <div class="row"><span class="fx0 mono muted" style="width:18px">${i+1}</span><select data-p="effects.${i}.type">${Object.entries(EFFECT_TYPES).map(([k,v])=>`<option value="${k}" ${k===e.type?'selected':''}>${v}</option>`).join('')}</select>
         <button class="x fx0" data-del="effects.${i}">✕</button></div>
-      <div class="row" style="margin-top:5px"><input class="mono" list="tgts" data-p="effects.${i}.target" value="${esc(e.target)}" placeholder="${e.type==='produce'?'재화 id':'대상 (예: wood.production)'}">
+      <div class="row" style="margin-top:5px">${tgtCtl(e,i)}
         <input data-p="effects.${i}.value" data-t="numOrStr" value="${esc(e.value)}" style="width:70px" class="fx0" title="값">
-        <label class="fx0" style="display:flex;gap:4px;align-items:center;color:var(--tx2);font-size:12px"><input type="checkbox" data-p="effects.${i}.perLevel" data-t="bool" ${e.perLevel?'checked':''}>레벨당</label></div>
+        <label class="fx0" style="display:flex;gap:4px;align-items:center;color:var(--tx2);font-size:12px" title="체크하면 레벨마다 효과가 쌓여요. 체크를 풀면 레벨과 상관없이 한 번만 적용돼요."><input type="checkbox" data-p="effects.${i}.perLevel" data-t="bool" ${e.perLevel?'checked':''}>레벨당</label></div>
+      ${tgtInfo(e,i)}
+      <div class="hint" data-fxh="${i}" style="margin:4px 0 0"></div>
     </div>`).join('')}</div>
-    <datalist id="tgts">${[...new Set(targets)].map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
+    <div class="hint" style="margin-top:3px">대상은 왼쪽 <b>수치</b> 탭에 등록한 것만 고를 수 있어요 (생산은 재화, 해금은 기능 이름).</div>
     <button class="add" data-add="effects">+ 효과</button>
     <div class="lbl">플레이어에게 보이는 설명</div>
     <textarea data-p="description" placeholder="예: 나무 생산량 ×{value1}">${esc(n.description)}</textarea>
@@ -926,20 +1076,27 @@ function renderRight(){
   </div>`;
   renderDerived();
   // 바인딩
-  el.querySelectorAll('[data-p]').forEach(inp=>{
-    const ev = inp.tagName==='SELECT'||inp.type==='checkbox' ? 'change':'input';
-    inp.addEventListener(ev,()=>{ setPath(n,inp.dataset.p,readVal(inp)); changed(); renderDerived();
-      if(inp.tagName==='SELECT'||inp.type==='checkbox') snapshot(); });
+  bindPanel(el,n);
+  bindFill(n);
+  el.querySelectorAll('[data-statsel]').forEach(sl=>sl.onchange=()=>{
+    const e=n.effects[+sl.dataset.statsel], v=sl.value;
+    if(v==='__new'){
+      let id='stat',k=1; while(stat(id+k)) k++;
+      P.stats.push({id:id+k,name:'새 수치',note:''}); e.target=id+k;
+      tab='stat'; changed(true); renderAll();
+      toast('새 수치를 만들었어요 — 왼쪽 수치 탭에서 이름과 ID를 고치세요');
+      return;
+    }
+    e.target=v; changed(true); renderRight();
+  });
+  el.querySelectorAll('[data-regstat]').forEach(b=>b.onclick=()=>{
+    const t=b.dataset.regstat;
+    if(!stat(t)) P.stats.push({id:t,name:t,note:''});
+    changed(true); renderAll(); toast(`수치 "${t}"를 등록했어요 — 수치 탭에서 이름을 붙여보세요`);
   });
   el.querySelectorAll('[data-ctype]').forEach(s=>s.onchange=()=>{ const t=s.value;
     setPath(n,s.dataset.ctype, t==='node'?{node:P.nodes.find(m=>m.id!==n.id)?.id||'',minLevel:1}:t==='resource'?{resource:P.resources[0]?.id||'',reached:100}:{custom:''});
     changed(true); renderRight(); });
-  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ const parts=b.dataset.del.split('.'); const i=+parts.pop(); getPath(n,parts.join('.')).splice(i,1); changed(true); renderAll(); });
-  el.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{ const list=getPath(n,b.dataset.add); const k=b.dataset.add;
-    if(k==='cost') list.push({resource:P.resources.find(r=>!n.cost.some(c=>c.resource===r.id))?.id||P.resources[0]?.id||'',base:10,growth:n.maxLevel>1?1.15:1});
-    else if(k==='effects') list.push({type:'multiply',target:'',value:1.1,perLevel:n.maxLevel>1});
-    else list.push(P.nodes.length>1?{node:P.nodes.find(m=>m.id!==n.id).id,minLevel:1}:{custom:''});
-    changed(true); renderAll(); });
   el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ select(c.dataset.go); centerOn(c.dataset.go); });
   $('#nodeId').addEventListener('change',e=>renameNode(n,e.target));
   const up=$('#unpinNode'); if(up) up.onclick=()=>{ n.pos=null; changed(true); renderAll(); toast('자동 정렬 위치로 되돌렸어요'); };
@@ -952,6 +1109,28 @@ function renderRight(){
   $('#dupNode').onclick=()=>{ const c=JSON.parse(JSON.stringify(n)); c.id=uniqueId(n.id+'_copy'); c.name=n.name+' (복사)';
     if(c.pos) c.pos={x:c.pos.x+24,y:c.pos.y+NH+GY};
     P.nodes.push(c); sel=c.id; selSet=new Set([c.id]); changed(true); renderAll(); centerOn(c.id); };
+}
+function bindPanel(root,n){
+  root.querySelectorAll('[data-p]').forEach(inp=>{
+    const ev = inp.tagName==='SELECT'||inp.type==='checkbox' ? 'change':'input';
+    inp.addEventListener(ev,()=>{
+      setPath(n,inp.dataset.p,readVal(inp)); 
+      if(inp.dataset.p==='maxLevel'){ syncCost(n); refreshCostBox(n); }
+      changed(); renderDerived();
+      if(inp.tagName==='SELECT'||inp.type==='checkbox') snapshot();
+      if(inp.dataset.p && /^cost\.\d+\.resource$/.test(inp.dataset.p)) refreshCostBox(n);
+    });
+    if(inp.dataset.p==='maxLevel') inp.addEventListener('change',()=>{ // 편집이 끝나면 남는 레벨 정리
+      if(!(num(inp.value)>=1)){ inp.value=1; setPath(n,'maxLevel',1); }
+      syncCost(n,true); refreshCostBox(n); changed(true); });
+    if(/^effects\.\d+\.(target|type|perLevel)$/.test(inp.dataset.p||'')) inp.addEventListener('change',()=>{ snapshot(); renderRight(); });
+  });
+  root.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ const parts=b.dataset.del.split('.'); const i=+parts.pop(); getPath(n,parts.join('.')).splice(i,1); changed(true); renderAll(); });
+  root.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{ const list=getPath(n,b.dataset.add); const k=b.dataset.add;
+    if(k==='cost') list.push({resource:P.resources.find(r=>!n.cost.some(c=>c.resource===r.id))?.id||P.resources[0]?.id||'',values:[...Array(levelCount(n))].map(()=>10)});
+    else if(k==='effects') list.push({type:'multiply',target:'',value:1.1,perLevel:n.maxLevel>1});
+    else list.push(P.nodes.length>1?{node:P.nodes.find(m=>m.id!==n.id).id,minLevel:1}:{custom:''});
+    changed(true); renderAll(); });
 }
 function renderBulk(el){
   const ns=selNodes(); const ids=ns.map(n=>n.id);
@@ -1013,15 +1192,11 @@ function renderBulk(el){
 }
 function renderDerived(){
   const n=sel&&node(sel); if(!n) return;
-  const lv=Math.min(n.maxLevel,10);
-  const cp=$('#costPrev');
-  if(cp){ if(n.cost.length && n.maxLevel>1){
-      const levels=[...Array(lv)].map((_,i)=>i+1);
-      cp.innerHTML=`<table class="cost"><tr><th>Lv</th>${n.cost.map(c=>`<th>${esc(resName(c.resource))}</th>`).join('')}</tr>
-        ${levels.map(l=>`<tr><td>${l}</td>${n.cost.map(c=>`<td>${fmt(costAt(c,l))}</td>`).join('')}</tr>`).join('')}
-        <tr><td class="muted">합계${n.maxLevel>10?' (10Lv)':''}</td>${n.cost.map(c=>`<td style="color:var(--acc2)">${fmt(levels.reduce((a,l)=>a+costAt(c,l),0))}</td>`).join('')}</tr></table>
-        ${n.maxLevel>10?`<div class="hint">Lv ${n.maxLevel}: ${n.cost.map(c=>resName(c.resource)+' '+fmt(costAt(c,n.maxLevel))).join(', ')}</div>`:''}`;
-    } else cp.innerHTML=''; }
+  const cs=$('#costSum');
+  if(cs) cs.innerHTML = n.cost.length&&levelCount(n)>1
+    ? `Lv1~${levelCount(n)} 합계 · ` + n.cost.map(c=>`${esc(resName(c.resource))} <b style="color:var(--acc2)">${esc(fmt(costSum(n,c)))}</b>`).join(' · ')
+    : '';
+  document.querySelectorAll('#right [data-fxh]').forEach(d=>{ const e=n.effects[+d.dataset.fxh]; d.textContent=e?effectHint(n,e):''; });
   const dp=$('#descPrev'); if(dp) dp.textContent = describe(n) || '(설명 미리보기)';
   const ni=$('#nodeIssues'); if(ni){ const is=validate().filter(i=>i.id===n.id);
     ni.innerHTML=is.length?is.map(i=>`<div style="color:${lvColor(i.lv)};font-size:12px">● ${esc(i.msg)}</div>`).join(''):'<span style="color:var(--ok);font-size:12px">✓ 문제 없음</span>'; }
@@ -1179,17 +1354,19 @@ ${P.meta.concept||'(작성되지 않음)'}
 
 ## 데이터 스키마 (${SCHEMA})
 - \`resources[]\`: { id, name, manual(노드 없이 직접 얻는 재화인지), note }
+- \`stats[]\`: { id, name, note } — 업그레이드가 바꾸는 수치(데미지·공격 속도 등). 재화가 아니다. effects의 target으로 쓴다
 - \`nodes[]\`: 업그레이드 노드
   - \`id\`: snake_case 영문, 고유. 다른 노드가 이 값으로 참조함
   - \`name\`, \`status\`: idea | wip | done | cut
   - \`maxLevel\`: 1이면 1회성, 2 이상이면 반복 구매
-  - \`cost[]\`: { resource, base, growth } — 레벨 n 가격 = ceil(base × growth^(n−1))
+  - \`cost[]\`: { resource, values } — \`values\`는 **레벨별 가격 배열**이고 길이는 maxLevel과 같다 (values[0] = Lv1 가격). 고정 증가율은 없고 레벨마다 값을 자유롭게 정한다
   - \`requires.all[]\`: 모두 충족해야 함 (AND) / \`requires.any[]\`: 하나 이상 충족 (OR, 비어 있으면 무시)
     - 조건 형태: { node, minLevel } | { resource, reached } (해당 재화 도달량) | { custom } (자유 텍스트)
   - \`effects[]\`: { type, target, value, perLevel }
     - type: produce(target 재화를 초당 value 생산) | multiply(target에 ×value) | add(target에 +value) | unlock(target 기능 해금) | custom
-    - target 예: \`wood.production\`, \`gather.speed\`, \`food.storage\`
-    - perLevel: true면 레벨마다 효과가 누적
+    - multiply·add의 target은 반드시 \`stats[]\`에 있는 id (예: \`damage\`, \`gather.speed\`, \`wood.production\`). 새 대상을 쓰면 \`stats[]\`에도 꼭 추가할 것
+    - produce의 target은 재화 id, unlock의 target은 해금할 기능 이름 (수치가 아니어도 됨)
+    - perLevel: true면 레벨마다 누적 — multiply는 value^Lv, add·produce는 value×Lv. false면 레벨과 무관하게 한 번만 적용
   - \`description\`: 플레이어에게 보이는 문장. \`{value1}\`, \`{value2}\`…는 effects[0], effects[1]…의 value, \`{maxLevel}\`도 가능
   - \`designNote\`: 디자이너의 의도 메모 (게임에 노출되지 않음)
   - \`tags[]\`: 자유 분류용 문자열 배열. 묶음(예: 전투/생산, 챕터)이 필요하면 태그를 쓴다 — 시대/레이어 같은 고정 계층은 없다
@@ -1197,6 +1374,7 @@ ${P.meta.concept||'(작성되지 않음)'}
 
 ## 현재 상태 요약
 - 재화 ${P.resources.length}개: ${P.resources.map(r=>`${r.name}(${r.id})`).join(', ')}
+- 수치 ${P.stats.length}개: ${P.stats.map(t=>`${t.name}(${t.id})`).join(', ')||'(없음)'}
 - 태그: ${[...new Set(P.nodes.flatMap(n=>n.tags))].join(', ')||'(없음)'}
 - 노드 ${P.nodes.length}개, 의존 깊이 ${L.cols}단계
 - 검증: ${issues.length?issues.filter(i=>i.lv!=='i').map(i=>`[${i.lv==='e'?'오류':'경고'}] ${i.id?i.id+': ':''}${i.msg}`).join(' / ')||'오류·경고 없음':'문제 없음'}
@@ -1211,7 +1389,7 @@ ${request||'(여기에 요청을 적어주세요)'}
 
 ## 응답 규칙
 1. 수정이 반영된 **전체 JSON**을 \`\`\`json 코드블록 하나로 반환해 주세요. (위 스키마 그대로, 이 에디터에 다시 불러옵니다)
-2. 기존 노드의 id와 pos는 바꾸지 마세요. 새 노드 id는 snake_case 영문으로, 기존과 겹치지 않게. 새 노드의 pos는 null로 두세요.
+2. 비용은 레벨마다 다른 값을 넣어도 됩니다 (values 배열 길이 = maxLevel). 기존 노드의 id와 pos는 바꾸지 마세요. 새 노드 id는 snake_case 영문으로, 기존과 겹치지 않게. 새 노드의 pos는 null로 두세요.
 3. 수치 효과는 effects에 구조화하고, description에서는 {value1} 같은 템플릿으로 참조해 주세요.
 4. 새로 추가하거나 크게 바꾼 노드에는 designNote에 의도를 짧게 적어 주세요.
 5. JSON 뒤에 무엇을 왜 바꿨는지 짧게 요약해 주세요.
@@ -1318,7 +1496,7 @@ function diff(a,b){
       const fields=Object.keys({...x,...y}).filter(k=>JSON.stringify(x[k])!==JSON.stringify(y[k]));
       if(fields.length) out.push(['c',coll,x.id,nameOf(x)+' — '+fields.join(', '),label,i]); });
   };
-  cmp('resources','재화',x=>x.name); cmp('nodes','노드',x=>x.name);
+  cmp('resources','재화',x=>x.name); cmp('stats','수치',x=>x.name); cmp('nodes','노드',x=>x.name);
   if(a.meta.name!==b.meta.name||a.meta.concept!==b.meta.concept) out.push(['c','meta','meta','이름/컨셉','프로젝트',-1]);
   return out;
 }
@@ -1343,10 +1521,10 @@ function checkImport(){
   const box=$('#impDiff'); pendingImport=null; pendingDiff=[];
   try{
     const raw=extractJSON($('#impText').value); const np=normalize(raw);
-    if(!np.nodes.length && !np.resources.length) throw new Error('노드나 재화가 없는 데이터예요');
+    if(!np.nodes.length && !np.resources.length && !np.stats.length) throw new Error('노드나 재화가 없는 데이터예요');
     const d=diff(normalize(P),np); pendingImport=np; pendingDiff=d;
     const sym={a:'+',r:'−',c:'~'};
-    box.innerHTML=`<div class="row"><div class="lbl" style="margin:0">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(불러올 데이터: 노드 ${np.nodes.length} · 재화 ${np.resources.length})</span></div>
+    box.innerHTML=`<div class="row"><div class="lbl" style="margin:0">변경점 ${d.length}개 <span style="text-transform:none;font-weight:400">(불러올 데이터: 노드 ${np.nodes.length} · 재화 ${np.resources.length} · 수치 ${np.stats.length})</span></div>
         ${d.length?`<label class="fx0" style="display:flex;gap:6px;align-items:center;color:var(--tx2)"><input type="checkbox" id="dAll" checked style="width:auto">전체 선택</label>`:''}</div>
       <div class="diff">${d.map(([k,coll,id,info,label],i)=>`<label class="${k}"><input type="checkbox" class="dchk" data-i="${i}" checked>
         <span>${sym[k]} [${esc(label)}] ${esc(id)} ${esc(info)}</span></label>`).join('')||'<span class="muted">현재와 동일해요</span>'}</div>

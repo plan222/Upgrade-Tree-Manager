@@ -1,5 +1,5 @@
 {
-  "schema": "upgrade-tree/2",
+  "schema": "upgrade-tree/3",
   "meta": {
     "name": "Stranded God",
     "concept": "지구에 불시착한 귀여운 외계인이 원시시대 인류를 발전시켜 항성간 이동 기술을 완성하고 집으로 돌아가는 코믹 인크리멘탈. Steam 데스크탑, Unity. 프레스티지 없음. 돈스타브식 월드 화면에서 바닥의 나무·돌을 클릭해 줍는 것으로 시작하고, 진행할수록 활동 반경과 카메라 줌아웃이 커진다. 건물은 숨겨진 격자에 직사각형으로 배치."
@@ -30,6 +30,38 @@
       "note": ""
     }
   ],
+  "stats": [
+    {
+      "id": "food.value",
+      "name": "식량 가치",
+      "note": ""
+    },
+    {
+      "id": "food.storage",
+      "name": "식량 저장량",
+      "note": ""
+    },
+    {
+      "id": "gather.speed",
+      "name": "채집 속도",
+      "note": "클릭 채집 쿨다운"
+    },
+    {
+      "id": "explore.radius",
+      "name": "활동 반경",
+      "note": "돌아다닐 수 있는 거리"
+    },
+    {
+      "id": "gather.amount",
+      "name": "클릭당 채집량",
+      "note": ""
+    },
+    {
+      "id": "research.speed",
+      "name": "연구 속도",
+      "note": ""
+    }
+  ],
   "nodes": [
     {
       "id": "fire",
@@ -39,13 +71,15 @@
       "cost": [
         {
           "resource": "wood",
-          "base": 1,
-          "growth": 1
+          "values": [
+            1
+          ]
         },
         {
           "resource": "stone",
-          "base": 1,
-          "growth": 1
+          "values": [
+            1
+          ]
         }
       ],
       "requires": {
@@ -75,13 +109,15 @@
       "cost": [
         {
           "resource": "food",
-          "base": 10,
-          "growth": 1
+          "values": [
+            10
+          ]
         },
         {
           "resource": "wood",
-          "base": 5,
-          "growth": 1
+          "values": [
+            5
+          ]
         }
       ],
       "requires": {
@@ -116,8 +152,13 @@
       "cost": [
         {
           "resource": "stone",
-          "base": 8,
-          "growth": 1.4
+          "values": [
+            8,
+            12,
+            16,
+            22,
+            31
+          ]
         }
       ],
       "requires": {
@@ -152,8 +193,11 @@
       "cost": [
         {
           "resource": "food",
-          "base": 15,
-          "growth": 1.8
+          "values": [
+            15,
+            27,
+            49
+          ]
         }
       ],
       "requires": {
@@ -188,8 +232,11 @@
       "cost": [
         {
           "resource": "wood",
-          "base": 12,
-          "growth": 1.5
+          "values": [
+            12,
+            18,
+            27
+          ]
         }
       ],
       "requires": {
@@ -224,13 +271,15 @@
       "cost": [
         {
           "resource": "wood",
-          "base": 20,
-          "growth": 1
+          "values": [
+            20
+          ]
         },
         {
           "resource": "stone",
-          "base": 20,
-          "growth": 1
+          "values": [
+            20
+          ]
         }
       ],
       "requires": {
@@ -271,13 +320,19 @@
       "cost": [
         {
           "resource": "stone",
-          "base": 15,
-          "growth": 1.6
+          "values": [
+            15,
+            24,
+            39
+          ]
         },
         {
           "resource": "food",
-          "base": 10,
-          "growth": 1.6
+          "values": [
+            10,
+            16,
+            26
+          ]
         }
       ],
       "requires": {
@@ -312,8 +367,9 @@
       "cost": [
         {
           "resource": "food",
-          "base": 60,
-          "growth": 1
+          "values": [
+            60
+          ]
         }
       ],
       "requires": {
@@ -353,13 +409,15 @@
       "cost": [
         {
           "resource": "food",
-          "base": 150,
-          "growth": 1
+          "values": [
+            150
+          ]
         },
         {
           "resource": "wood",
-          "base": 80,
-          "growth": 1
+          "values": [
+            80
+          ]
         }
       ],
       "requires": {
@@ -398,8 +456,9 @@
       "cost": [
         {
           "resource": "stone",
-          "base": 100,
-          "growth": 1
+          "values": [
+            100
+          ]
         }
       ],
       "requires": {
