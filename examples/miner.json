@@ -1,0 +1,1396 @@
+{
+  "schema": "upgrade-tree/3",
+  "meta": {
+    "name": "소행성 광부",
+    "concept": "소행성을 사서 직접 캐는 인크리멘탈. 강화는 노드 하나하나를 돈과 재료로 올린다.\n관문 노드(경도·광폭·정제기)는 1회성이고 다음 노드를 연다.\n수치의 기본값은 게임 쪽에 있고, 여기 효과는 전부 기본값에 더해지는 양이다."
+  },
+  "resources": [
+    {
+      "id": "credit",
+      "name": "크레딧",
+      "manual": true,
+      "note": ""
+    }
+  ],
+  "stats": [
+    {
+      "id": "damage",
+      "name": "채굴 데미지",
+      "note": "기본 1"
+    },
+    {
+      "id": "mining_speed",
+      "name": "초당 타격",
+      "note": "기본 1.0"
+    },
+    {
+      "id": "critical",
+      "name": "크리티컬 확률(%)",
+      "note": "기본 0"
+    },
+    {
+      "id": "drill_hardness",
+      "name": "채굴 가능 경도",
+      "note": "기본 1. 정수로 내림한다"
+    },
+    {
+      "id": "wide_tiles",
+      "name": "한 번에 캐는 칸",
+      "note": "기본 1. 정수로 내림한다"
+    },
+    {
+      "id": "thrust",
+      "name": "추력",
+      "note": "기본 6"
+    },
+    {
+      "id": "move_speed",
+      "name": "최대 속도",
+      "note": "기본 4"
+    },
+    {
+      "id": "max_oxygen",
+      "name": "최대 산소(초)",
+      "note": "기본 30"
+    },
+    {
+      "id": "oxygen_use",
+      "name": "초당 산소 소모",
+      "note": "기본 1.0. 낮을수록 좋다"
+    },
+    {
+      "id": "pack_weight",
+      "name": "배낭 무게",
+      "note": "기본 20"
+    },
+    {
+      "id": "hold_weight",
+      "name": "우주선 창고 무게",
+      "note": "기본 200"
+    },
+    {
+      "id": "ship_oxygen",
+      "name": "우주선 산소",
+      "note": "기본 300"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "drill_bit",
+      "name": "드릴 비트",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            50,
+            100,
+            130,
+            160,
+            200,
+            240,
+            290,
+            340,
+            390,
+            460
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "damage",
+          "value": 1,
+          "perLevel": true
+        }
+      ],
+      "description": "채굴 데미지 +{value1}",
+      "designNote": "가장 먼저 누르는 줄. 첫 강화 50 cr 은 고정이다.",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 120
+      }
+    },
+    {
+      "id": "drill_motor",
+      "name": "드릴 모터",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            60,
+            75,
+            94,
+            120,
+            150,
+            180,
+            230,
+            290,
+            360,
+            450
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit",
+            "minLevel": 2
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "mining_speed",
+          "value": 0.1,
+          "perLevel": true
+        }
+      ],
+      "description": "초당 타격 +{value1}",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 250
+      }
+    },
+    {
+      "id": "drill_stabilizer",
+      "name": "스태빌라이저",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            70,
+            88,
+            110,
+            140,
+            170,
+            210,
+            270,
+            330,
+            420,
+            520
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_motor",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "critical",
+          "value": 0.5,
+          "perLevel": true
+        }
+      ],
+      "description": "크리티컬 확률 +{value1}%",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 380
+      }
+    },
+    {
+      "id": "hardness_2",
+      "name": "경도 2 헤드",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            120
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "drill_hardness",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "채굴 가능 경도 +{value1} — 2단계 재료를 캔다",
+      "designNote": "예전 Mk2 구매 자리. 다음 드릴 노드를 여는 관문이기도 하다.",
+      "tags": [
+        "드릴",
+        "관문"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 120
+      }
+    },
+    {
+      "id": "drill_bit_2",
+      "name": "강화 드릴 비트",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            410,
+            510,
+            630,
+            800,
+            1000,
+            1200,
+            1500,
+            1900,
+            2400,
+            3100
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "hardness_2",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "damage",
+          "value": 3,
+          "perLevel": true
+        }
+      ],
+      "description": "채굴 데미지 +{value1}",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 120
+      }
+    },
+    {
+      "id": "drill_motor_2",
+      "name": "고속 모터",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            450,
+            560,
+            700,
+            880,
+            1100,
+            1400,
+            1700,
+            2100,
+            2700,
+            3400
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "hardness_2",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "mining_speed",
+          "value": 0.1,
+          "perLevel": true
+        }
+      ],
+      "description": "초당 타격 +{value1}",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 250
+      }
+    },
+    {
+      "id": "hardness_3",
+      "name": "경도 3 헤드",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            4000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit_2",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "drill_hardness",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "채굴 가능 경도 +{value1} — 3단계 재료를 캔다",
+      "designNote": "",
+      "tags": [
+        "드릴",
+        "관문"
+      ],
+      "pos": {
+        "x": 990,
+        "y": 120
+      }
+    },
+    {
+      "id": "drill_bit_3",
+      "name": "관통 드릴 비트",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            3000,
+            3900,
+            4800,
+            6000,
+            7400,
+            9300,
+            11000,
+            14000,
+            18000,
+            22000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "hardness_3",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "damage",
+          "value": 8,
+          "perLevel": true
+        }
+      ],
+      "description": "채굴 데미지 +{value1}",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 1280,
+        "y": 120
+      }
+    },
+    {
+      "id": "wide_drill",
+      "name": "광폭 드릴",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            41000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit_3",
+            "minLevel": 5
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "wide_tiles",
+          "value": 2,
+          "perLevel": false
+        }
+      ],
+      "description": "한 번에 캐는 칸 +{value1} (3칸)",
+      "designNote": "채굴 처리량이 3배가 된다. 이 뒤로는 재료 HP를 크게 올려야 한다.",
+      "tags": [
+        "드릴",
+        "관문"
+      ],
+      "pos": {
+        "x": 1570,
+        "y": 250
+      }
+    },
+    {
+      "id": "hardness_4",
+      "name": "경도 4 헤드",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            130000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit_3",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "drill_hardness",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "채굴 가능 경도 +{value1} — 4단계 재료를 캔다",
+      "designNote": "",
+      "tags": [
+        "드릴",
+        "관문"
+      ],
+      "pos": {
+        "x": 1570,
+        "y": 120
+      }
+    },
+    {
+      "id": "drill_bit_4",
+      "name": "결정 드릴 비트",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            23000,
+            29000,
+            36000,
+            45000,
+            57000,
+            71000,
+            89000,
+            110000,
+            140000,
+            170000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "hardness_4",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "damage",
+          "value": 25,
+          "perLevel": true
+        }
+      ],
+      "description": "채굴 데미지 +{value1}",
+      "designNote": "",
+      "tags": [
+        "드릴"
+      ],
+      "pos": {
+        "x": 1860,
+        "y": 120
+      }
+    },
+    {
+      "id": "hardness_5",
+      "name": "경도 5 헤드",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            270000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "drill_bit_4",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "drill_hardness",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "채굴 가능 경도 +{value1} — 5단계 재료를 캔다",
+      "designNote": "",
+      "tags": [
+        "드릴",
+        "관문"
+      ],
+      "pos": {
+        "x": 2150,
+        "y": 120
+      }
+    },
+    {
+      "id": "engine_nozzle",
+      "name": "추력 노즐",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            60,
+            75,
+            94,
+            120,
+            150,
+            180,
+            230,
+            290,
+            360,
+            450
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "move_speed",
+          "value": 0.1,
+          "perLevel": true
+        }
+      ],
+      "description": "최대 속도 +{value1}",
+      "designNote": "",
+      "tags": [
+        "엔진"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 540
+      }
+    },
+    {
+      "id": "engine_thrust",
+      "name": "추력기",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            70,
+            88,
+            110,
+            140,
+            170,
+            210,
+            270,
+            330,
+            420,
+            520
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "engine_nozzle",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "thrust",
+          "value": 0.4,
+          "perLevel": true
+        }
+      ],
+      "description": "추력 +{value1}",
+      "designNote": "",
+      "tags": [
+        "엔진"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 670
+      }
+    },
+    {
+      "id": "engine_tuneup",
+      "name": "출력 해방",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            380
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "engine_nozzle",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "move_speed",
+          "value": 1,
+          "perLevel": false
+        },
+        {
+          "type": "add",
+          "target": "thrust",
+          "value": 4,
+          "perLevel": false
+        }
+      ],
+      "description": "최대 속도 +{value1}, 추력 +{value2}",
+      "designNote": "",
+      "tags": [
+        "엔진",
+        "관문"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 540
+      }
+    },
+    {
+      "id": "engine_nozzle_2",
+      "name": "정밀 노즐",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            460,
+            570,
+            720,
+            900,
+            1100,
+            1400,
+            1700,
+            2100,
+            2800,
+            3500
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "engine_tuneup",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "move_speed",
+          "value": 0.1,
+          "perLevel": true
+        }
+      ],
+      "description": "최대 속도 +{value1}",
+      "designNote": "",
+      "tags": [
+        "엔진"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 540
+      }
+    },
+    {
+      "id": "engine_thrust_2",
+      "name": "증폭 추력기",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            500,
+            620,
+            780,
+            980,
+            1200,
+            1500,
+            1900,
+            2400,
+            3000,
+            3700
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "engine_tuneup",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "thrust",
+          "value": 0.4,
+          "perLevel": true
+        }
+      ],
+      "description": "추력 +{value1}",
+      "designNote": "",
+      "tags": [
+        "엔진"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 670
+      }
+    },
+    {
+      "id": "oxygen_tank",
+      "name": "산소 탱크",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            45,
+            56,
+            70,
+            88,
+            110,
+            140,
+            170,
+            210,
+            270,
+            340
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "max_oxygen",
+          "value": 1.5,
+          "perLevel": true
+        }
+      ],
+      "description": "최대 산소 +{value1}초",
+      "designNote": "",
+      "tags": [
+        "산소"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 860
+      }
+    },
+    {
+      "id": "oxygen_recycler",
+      "name": "재순환기",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            82,
+            100,
+            120,
+            160,
+            200,
+            240,
+            320,
+            390,
+            490,
+            610
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "oxygen_tank",
+            "minLevel": 3
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "oxygen_use",
+          "value": -0.01,
+          "perLevel": true
+        }
+      ],
+      "description": "초당 산소 소모 {value1}",
+      "designNote": "값이 내려가는 줄이다. 활동 반경을 늘리는 두 번째 손잡이.",
+      "tags": [
+        "산소"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 990
+      }
+    },
+    {
+      "id": "oxygen_expand",
+      "name": "용량 확장",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            250
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "oxygen_tank",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "max_oxygen",
+          "value": 5,
+          "perLevel": false
+        }
+      ],
+      "description": "최대 산소 +{value1}초",
+      "designNote": "",
+      "tags": [
+        "산소",
+        "관문"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 860
+      }
+    },
+    {
+      "id": "oxygen_tank_2",
+      "name": "대용량 탱크",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            360,
+            450,
+            560,
+            700,
+            870,
+            1100,
+            1300,
+            1700,
+            2100,
+            2700
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "oxygen_expand",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "max_oxygen",
+          "value": 2,
+          "perLevel": true
+        }
+      ],
+      "description": "최대 산소 +{value1}초",
+      "designNote": "",
+      "tags": [
+        "산소"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 860
+      }
+    },
+    {
+      "id": "cargo_pod",
+      "name": "적재 포드",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            40,
+            50,
+            62,
+            78,
+            98,
+            120,
+            150,
+            190,
+            240,
+            300
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "pack_weight",
+          "value": 2,
+          "perLevel": true
+        }
+      ],
+      "description": "배낭 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "적재"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 1180
+      }
+    },
+    {
+      "id": "cargo_expand",
+      "name": "포드 증설",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            240
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "cargo_pod",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "pack_weight",
+          "value": 5,
+          "perLevel": false
+        }
+      ],
+      "description": "배낭 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "적재",
+        "관문"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 1180
+      }
+    },
+    {
+      "id": "cargo_pod_2",
+      "name": "확장 포드",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            320,
+            400,
+            490,
+            620,
+            770,
+            970,
+            1200,
+            1500,
+            1900,
+            2300
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "cargo_expand",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "pack_weight",
+          "value": 3,
+          "perLevel": true
+        }
+      ],
+      "description": "배낭 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "적재"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 1180
+      }
+    },
+    {
+      "id": "ship_hold",
+      "name": "우주선 창고",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            60,
+            75,
+            94,
+            120,
+            150,
+            180,
+            230,
+            290,
+            360,
+            450
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "hold_weight",
+          "value": 30,
+          "perLevel": true
+        }
+      ],
+      "description": "창고 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "우주선"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 1370
+      }
+    },
+    {
+      "id": "ship_oxygen",
+      "name": "산소 저장고",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            70,
+            88,
+            110,
+            140,
+            170,
+            210,
+            270,
+            330,
+            420,
+            520
+          ]
+        }
+      ],
+      "requires": {
+        "all": [],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "ship_oxygen",
+          "value": 20,
+          "perLevel": true
+        }
+      ],
+      "description": "우주선 산소 +{value1}",
+      "designNote": "",
+      "tags": [
+        "우주선"
+      ],
+      "pos": {
+        "x": 120,
+        "y": 1500
+      }
+    },
+    {
+      "id": "ice_refinery",
+      "name": "얼음 정제기",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            620
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "ship_oxygen",
+            "minLevel": 5
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "unlock",
+          "target": "ice_refinery",
+          "value": 1,
+          "perLevel": false
+        }
+      ],
+      "description": "캔 얼음이 우주선 산소가 된다",
+      "designNote": "1회 해금. 오래 캐는 큰 소행성에서 돌아오지 않아도 되게 한다.",
+      "tags": [
+        "우주선",
+        "해금"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 1500
+      }
+    },
+    {
+      "id": "ship_expand",
+      "name": "선체 증축",
+      "status": "idea",
+      "maxLevel": 1,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            2400
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "ship_hold",
+            "minLevel": 10
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "hold_weight",
+          "value": 60,
+          "perLevel": false
+        }
+      ],
+      "description": "창고 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "우주선",
+        "관문"
+      ],
+      "pos": {
+        "x": 410,
+        "y": 1370
+      }
+    },
+    {
+      "id": "ship_hold_2",
+      "name": "대형 창고",
+      "status": "idea",
+      "maxLevel": 10,
+      "cost": [
+        {
+          "resource": "credit",
+          "values": [
+            670,
+            830,
+            1000,
+            1300,
+            1700,
+            2000,
+            2600,
+            3200,
+            4000,
+            5000
+          ]
+        }
+      ],
+      "requires": {
+        "all": [
+          {
+            "node": "ship_expand",
+            "minLevel": 1
+          }
+        ],
+        "any": []
+      },
+      "effects": [
+        {
+          "type": "add",
+          "target": "hold_weight",
+          "value": 40,
+          "perLevel": true
+        }
+      ],
+      "description": "창고 무게 +{value1}",
+      "designNote": "",
+      "tags": [
+        "우주선"
+      ],
+      "pos": {
+        "x": 700,
+        "y": 1370
+      }
+    }
+  ]
+}
